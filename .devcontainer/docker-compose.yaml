@@ -1,0 +1,21 @@
+version: '3'
+services:
+  db:
+    image: mysql:8.0.17
+#    container_name: mysql-8.0.17
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: example  # 或者直接在这里设置root密码，但通常建议使用.env文件
+      MYSQL_DATABASE: mydb  # 可选：设置默认数据库名
+      MYSQL_USER: myuser  # 可选：设置默认用户名
+      MYSQL_PASSWORD: mypass  # 可选：设置默认用户密码
+    ports:
+      - "3306:3306"
+  bk-hcm:
+    build:
+      context: .  # 指定Dockerfile所在的目录
+      dockerfile: Dockerfile  # 指定Dockerfile文件名（如果它不是默认的Dockerfile）
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
