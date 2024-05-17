@@ -25,7 +25,7 @@ jobs:
           node-version: '16.x'
 
       - name: Make package
-        run: make
+        run: make ui
 
       - name: Tar package
         run: tar -cvzf bk-hcm.tar.gz .
