@@ -191,6 +191,17 @@ func (r *Request) Body(body interface{}) *Request {
 		return r
 	}
 
+	if obj, ok := body.(io.Reader); ok {
+		b, err := io.ReadAll(obj)
+		if err != nil {
+			r.body = []byte("")
+			r.err = err
+			return r
+		}
+		r.body = b
+		return r
+	}
+
 	valueOf := reflect.ValueOf(body)
 	switch valueOf.Kind() {
 	case reflect.Interface:

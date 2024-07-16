@@ -11,7 +11,7 @@ const (
 )
 
 // GenerateExcel 生成 Excel 文件
-func GenerateExcel(titles []string, data [][]interface{}) (*bytes.Buffer, error) {
+func GenerateExcel(data [][]interface{}) (*bytes.Buffer, error) {
 	// 创建一个新的 Excel 文档
 	f := excelize.NewFile()
 
@@ -21,22 +21,7 @@ func GenerateExcel(titles []string, data [][]interface{}) (*bytes.Buffer, error)
 		return nil, err
 	}
 
-	// 设置标题行
 	row := 1
-	for i, title := range titles {
-		cell, err := excelize.CoordinatesToCellName(i+1, row)
-		if err != nil {
-			return nil, err
-		}
-
-		if err = f.SetCellValue(defaultSheetName, cell, title); err != nil {
-			return nil, err
-		}
-	}
-	row++
-
-	// 定义一个结构体数组
-
 	// 写入数据到 Excel
 	for _, rowData := range data {
 		for col, value := range rowData {

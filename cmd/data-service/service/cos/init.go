@@ -38,6 +38,7 @@ func InitService(cap *capability.Capability) {
 	}
 	h := rest.NewHandler()
 	h.Add("GenerateTemporalUrl", http.MethodPost, "/cos/temporal_urls/{action}/generate", svc.GenerateTemporalUrl)
+	h.Add("UploadFile", http.MethodPost, "/cos/upload/{filename}", svc.UploadFile)
 
 	h.Load(cap.WebService)
 }
@@ -70,4 +71,14 @@ func (s service) GenerateTemporalUrl(cts *rest.Contexts) (any, error) {
 		Token: cred.SessionToken,
 		URL:   url,
 	}, nil
+}
+
+// UploadFile uploads a file to COS.
+func (s service) UploadFile(cts *rest.Contexts) (interface{}, error) {
+	filename := cts.PathParameter("filename").String()
+
+	if err := s.ostore.Upload(cts.Kit, filename, cts.Request.Request.Body); err != nil {
+		return nil, err
+	}
+	return nil, nil
 }

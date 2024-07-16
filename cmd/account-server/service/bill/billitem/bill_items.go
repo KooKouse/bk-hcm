@@ -20,15 +20,12 @@
 package billitem
 
 import (
-	"fmt"
-
 	"hcm/pkg/api/account-server/bill"
 	"hcm/pkg/api/core"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
-	"hcm/pkg/kit"
 	"hcm/pkg/logs"
 	"hcm/pkg/rest"
 	"hcm/pkg/runtime/filter"
@@ -72,60 +69,4 @@ func (b *billItemSvc) ListBillItems(cts *rest.Contexts) (any, error) {
 
 	return b.client.DataService().Global.Bill.ListBillItemRaw(cts.Kit, billListReq)
 
-}
-
-// ExportBillItems 导出账单明细
-func (b *billItemSvc) ExportBillItems(cts *rest.Contexts) (any, error) {
-	vendor := enumor.Vendor(cts.PathParameter("vendor").String())
-	if len(vendor) == 0 {
-		return nil, errf.New(errf.InvalidParameter, "vendor is required")
-	}
-
-	req := new(bill.ExportBillItemReq)
-	if err := cts.DecodeInto(req); err != nil {
-		return nil, errf.NewFromErr(errf.DecodeRequestFailed, err)
-	}
-
-	if err := req.Validate(); err != nil {
-		return nil, errf.NewFromErr(errf.InvalidParameter, err)
-	}
-
-	err := b.authorizer.AuthorizeWithPerm(cts.Kit,
-		meta.ResourceAttribute{Basic: &meta.Basic{Type: meta.AccountBill, Action: meta.Find}})
-	if err != nil {
-		return nil, err
-	}
-
-	mergedFilter, err := tools.And(
-		tools.RuleEqual("vendor", vendor),
-		tools.RuleEqual("bill_year", req.BillYear),
-		tools.RuleEqual("bill_month", req.BillMonth),
-		req.Filter)
-	if err != nil {
-		logs.Errorf("fail merge filter for exporting bill items, err: %v, req: %+v, rid: %s", err, req, cts.Kit.Rid)
-		return nil, err
-	}
-
-	switch vendor {
-	case enumor.HuaWei:
-		return exportHuaweiBillItems(cts.Kit, b, mergedFilter, req.ExportLimit)
-	default:
-		return nil, fmt.Errorf("unsupport %s vendor", vendor)
-	}
-}
-
-func exportHuaweiBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression, requireCount uint64) (
-	any, error) {
-
-	billListReq := &core.ListReq{Filter: filter, Page: core.NewDefaultBasePage()}
-	_, err := b.client.DataService().HuaWei.Bill.ListBillItem(kt, billListReq)
-	if err != nil {
-		logs.Errorf("fail to list bill item for export, err: %v, req: %+v, rid: %s", err, billListReq, kt.Rid)
-		return nil, err
-	}
-
-	// TODO
-	// export as csv
-
-	return nil, nil
 }

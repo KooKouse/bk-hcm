@@ -1,0 +1,775 @@
+/*
+ * TencentBlueKing is pleased to support the open source community by making
+ * 蓝鲸智云 - 混合云管理平台 (BlueKing - Hybrid Cloud Management System) available.
+ * Copyright (C) 2024 THL A29 Limited,
+ * a Tencent company. All rights reserved.
+ * Licensed under the MIT License (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at http://opensource.org/licenses/MIT
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ *
+ * We undertake not to change the open source license (MIT license) applicable
+ *
+ * to the current version of the project delivered to anyone in the future.
+ */
+
+package billitem
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+
+	"hcm/cmd/account-server/logics/bill/export"
+	accountset "hcm/pkg/api/core/account-set"
+	"hcm/pkg/thirdparty/esb/cmdb"
+	"hcm/pkg/tools/slice"
+
+	"hcm/pkg/api/account-server/bill"
+	"hcm/pkg/api/core"
+	billapi "hcm/pkg/api/core/bill"
+	"hcm/pkg/criteria/enumor"
+	"hcm/pkg/criteria/errf"
+	"hcm/pkg/dal/dao/tools"
+	"hcm/pkg/iam/meta"
+	"hcm/pkg/kit"
+	"hcm/pkg/logs"
+	"hcm/pkg/rest"
+	"hcm/pkg/runtime/filter"
+
+	"github.com/shopspring/decimal"
+)
+
+var (
+	gcpExcelTitle = []interface{}{"核算年月", "业务名称", "BillingAccountId",
+		"项目ID", "项目名称", "服务分类", "服务分类名称", "Sku名称", "Location", "国家", "Region代码", "Region位置", "外币类型",
+		"用量单位", "用量", "外币成本(元)", "汇率", "人民币成本(元)"}
+
+	azureExcelTitle = []interface{}{"区域", "地区编码", "核算年月", "业务名称",
+		"账号邮箱", "子账号名称", "服务一级类别名称", "服务二级类别名称", "服务三级类别名称", "产品名称", "资源类别",
+		"计量地区", "资源地区编码", "单位", "用量", "折后税前成本（外币）", "币种", "汇率", "RMB成本（元）"}
+
+	huaWeiExcelTitle = []interface{}{"核算年月", "业务名称", "子账号", "账号类型",
+		"产品名称", "金额单位", "使用量类型", "使用量度量单位", "云服务类型编码", "云服务类型名称", "云服务区编码", "云服务区名称",
+		"资源类型编码", "资源类型名称", "计费模式", "账单类型", "套餐内使用量", "使用量", "预留实例使用量", "币种", "汇率",
+		"本期应付外币金额（元）", "本期应付人民币金额（元）"}
+
+	awsExcelTitle = []interface{}{"核算年月", "业务名称", "主帐号ID", "子帐号ID", "子账户名称", "发票ID", "账单实体",
+		"产品代号", "服务组", "产品名称", "API操作", "产品规格", "实例类型", "地区", "区域", "地区名称", "资源ID",
+		"计费方式", "计费类型", "计费说明", "用量", "单位", "折扣前成本（外币）", "外币种类", "人民币成本（元）", "汇率"}
+)
+
+// ExportBillItems 导出账单明细
+func (b *billItemSvc) ExportBillItems(cts *rest.Contexts) (any, error) {
+	vendor := enumor.Vendor(cts.PathParameter("vendor").String())
+	if len(vendor) == 0 {
+		return nil, errf.New(errf.InvalidParameter, "vendor is required")
+	}
+
+	req := new(bill.ExportBillItemReq)
+	if err := cts.DecodeInto(req); err != nil {
+		return nil, errf.NewFromErr(errf.DecodeRequestFailed, err)
+	}
+
+	if err := req.Validate(); err != nil {
+		return nil, errf.NewFromErr(errf.InvalidParameter, err)
+	}
+
+	err := b.authorizer.AuthorizeWithPerm(cts.Kit,
+		meta.ResourceAttribute{Basic: &meta.Basic{Type: meta.AccountBill, Action: meta.Find}})
+	if err != nil {
+		return nil, err
+	}
+
+	mergedFilter, err := tools.And(
+		tools.RuleEqual("vendor", vendor),
+		tools.RuleEqual("bill_year", req.BillYear),
+		tools.RuleEqual("bill_month", req.BillMonth),
+		req.Filter)
+	if err != nil {
+		logs.Errorf("fail merge filter for exporting bill items, err: %v, req: %+v, rid: %s", err, req, cts.Kit.Rid)
+		return nil, err
+	}
+
+	// 获取汇率
+	result, err := b.client.DataService().Global.Bill.ListExchangeRate(cts.Kit, &core.ListReq{
+		Filter: tools.ExpressionAnd(
+			tools.RuleEqual("from_currency", enumor.CurrencyUSD),
+			tools.RuleEqual("to_currency", enumor.CurrencyRMB),
+			tools.RuleEqual("year", req.BillYear),
+			tools.RuleEqual("month", req.BillMonth),
+		),
+		Page: &core.BasePage{
+			Start: 0,
+			Limit: 1,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get exchange rate from %s to %s in %d-%d failed, err %s",
+			enumor.CurrencyUSD, enumor.CurrencyRMB, req.BillYear, req.BillMonth, err.Error())
+	}
+	if len(result.Details) == 0 {
+		return nil, fmt.Errorf("get no exchange rate from %s to %s in %d-%d, rid %s",
+			enumor.CurrencyUSD, enumor.CurrencyRMB, req.BillYear, req.BillMonth, cts.Kit.Rid)
+	}
+	if result.Details[0].ExchangeRate == nil {
+		return nil, fmt.Errorf("get exchange rate is nil, from %s to %s in %d-%d, rid %s",
+			enumor.CurrencyUSD, enumor.CurrencyRMB, req.BillYear, req.BillMonth, cts.Kit.Rid)
+	}
+
+	switch vendor {
+	case enumor.HuaWei:
+		return exportHuaweiBillItems(cts.Kit, b, mergedFilter, req.ExportLimit, result.Details[0].ExchangeRate)
+	case enumor.Azure:
+		return exportAzureBillItems(cts.Kit, b, mergedFilter, req.ExportLimit, result.Details[0].ExchangeRate)
+	case enumor.Gcp:
+		return exportGcpBillItems(cts.Kit, b, mergedFilter, req.ExportLimit, result.Details[0].ExchangeRate)
+	case enumor.Aws:
+		return exportAwsBillItems(cts.Kit, b, mergedFilter, req.ExportLimit, result.Details[0].ExchangeRate)
+	case enumor.Zenlayer:
+		return exportZenlayerBillItems(cts.Kit, b, mergedFilter, req.ExportLimit, result.Details[0].ExchangeRate)
+	default:
+		return nil, fmt.Errorf("unsupport %s vendor", vendor)
+	}
+}
+
+func exportAwsBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
+	requireCount uint64, rate *decimal.Decimal) (any, error) {
+
+	details, err := b.client.DataService().Aws.Bill.ListBillItem(kt,
+		&core.ListReq{
+			Filter: filter,
+			Page:   core.NewCountPage(),
+		})
+
+	if err != nil {
+		return nil, err
+	}
+
+	var limit uint64
+	if requireCount <= details.Count {
+		limit = requireCount
+	} else {
+		limit = details.Count
+	}
+
+	result := make([]*billapi.AwsBillItem, 0, limit)
+	page := core.DefaultMaxPageLimit
+	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		if limit-offset < uint64(page) {
+			page = uint(limit - offset)
+		}
+		tmpResult, err := b.client.DataService().Aws.Bill.ListBillItem(kt,
+			&core.ListReq{
+				Filter: filter,
+				Page: &core.BasePage{
+					Start: uint32(offset),
+					Limit: page,
+				},
+			})
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, tmpResult.Details...)
+	}
+
+	rootAccountIDs := make([]string, 0, len(result))
+	mainAccountIDs := make([]string, 0, len(result))
+	bkBizIDs := make([]int64, 0, len(result))
+	for _, item := range result {
+		bkBizIDs = append(bkBizIDs, item.BkBizID)
+		rootAccountIDs = append(rootAccountIDs, item.RootAccountID)
+		mainAccountIDs = append(mainAccountIDs, item.MainAccountID)
+	}
+	bizNameMap, err := listBiz(kt, b, bkBizIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	mainAccountMap, err := listMainAccount(kt, b, mainAccountIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	rootAccountMap, err := listRootAccount(kt, b, rootAccountIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// awsExcelTitle = []interface{}{"核算年月", "业务名称", "主帐号ID", "子帐号ID", "子账户名称", "发票ID", "账单实体",
+	//		"产品代号", "服务组", "产品名称", "API操作", "产品规格", "实例类型", "地区", "区域", "地区名称", "资源ID",
+	//		"计费方式", "计费类型", "计费说明", "用量", "单位", "折扣前成本（外币）", "外币种类", "人民币成本（元）", "汇率"}
+	data := make([][]interface{}, 0, len(result)+1)
+	data = append(data, awsExcelTitle)
+	for _, item := range result {
+		var mainAccountID, mainAccountName, rootAccountID string
+		if mainAccount, ok := mainAccountMap[item.MainAccountID]; ok {
+			mainAccountID = mainAccount.CloudID
+			mainAccountName = mainAccount.Name
+		}
+		if rootAccount, ok := rootAccountMap[item.RootAccountID]; ok {
+			rootAccountID = rootAccount.CloudID
+		}
+
+		tmp := []interface{}{
+			fmt.Sprintf("%d-%02d", item.BillYear, item.BillMonth),
+			bizNameMap[item.BkBizID],
+			rootAccountID,
+			mainAccountID,
+			mainAccountName,
+			item.Extension.BillInvoiceId,
+			item.Extension.BillBillingEntity,
+			item.Extension.LineItemProductCode,
+			item.Extension.ProductProductFamily,
+			item.Extension.ProductProductName,
+			"API操作",
+			"产品规格",
+			"实例类型 product_instance_type?",
+			item.Extension.ProductToRegionCode,
+			"区域",
+			item.Extension.ProductFromLocation,
+			item.Extension.LineItemResourceId,
+			item.Extension.PricingTerm,
+			item.Extension.LineItemLineItemType,
+			item.Extension.LineItemLineItemDescription,
+			item.Extension.LineItemUsageAmount,
+			item.Extension.PricingUnit,
+			item.Cost,
+			item.Currency,
+			item.Cost.Mul(*rate),
+			*rate,
+		}
+		data = append(data, tmp)
+	}
+
+	buf, err := export.GenerateExcel(data)
+	if err != nil {
+		return nil, err
+	}
+
+	url, err := uploadFileAndReturnUrl(kt, b, buf)
+	if err != nil {
+		return nil, err
+	}
+
+	return url, nil
+}
+
+func exportZenlayerBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
+	requireCount uint64, rate *decimal.Decimal) (any, error) {
+
+	details, err := b.client.DataService().Zenlayer.Bill.ListBillItem(kt,
+		&core.ListReq{
+			Filter: filter,
+			Page:   core.NewCountPage(),
+		})
+
+	if err != nil {
+		return nil, err
+	}
+
+	var limit uint64
+	if requireCount <= details.Count {
+		limit = requireCount
+	} else {
+		limit = details.Count
+	}
+
+	result := make([]*billapi.ZenlayerBillItem, 0, limit)
+	page := core.DefaultMaxPageLimit
+	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		if limit-offset < uint64(page) {
+			page = uint(limit - offset)
+		}
+		tmpResult, err := b.client.DataService().Zenlayer.Bill.ListBillItem(kt,
+			&core.ListReq{
+				Filter: filter,
+				Page: &core.BasePage{
+					Start: uint32(offset),
+					Limit: page,
+				},
+			})
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, tmpResult.Details...)
+	}
+
+	// var azureExcelTitle = []string{"区域", "地区编码", "核算年月",  "事业群",
+	//"业务部门", "规划产品", "运营产品", "账号邮箱", "子账号名称", "服务一级类别名称",
+	//"服务二级类别名称", "服务三级类别名称", "产品名称", "资源类别", "计量地区",
+	//"资源地区编码", "单位", "用量", "折后税前成本（外币）", "币种", "汇率",
+	//"RMB成本（元）"}
+	data := make([][]interface{}, 0, len(result)+1)
+	data = append(data, azureExcelTitle)
+	// TODO parse data to excel format
+	//for _, item := range result {
+	//	tmp := []interface{}{
+	//		item.Region,
+	//		item.RegionCode,
+	//		item.,
+	//	}
+	//}
+
+	buf, err := export.GenerateExcel(data)
+	if err != nil {
+		return nil, err
+	}
+
+	url, err := uploadFileAndReturnUrl(kt, b, buf)
+	if err != nil {
+		return nil, err
+	}
+
+	return url, nil
+}
+
+var (
+	//item.Extension.MeasureId, // 金额单位。 1：元
+	huaWeiMeasureIdMap = map[int32]string{
+		1: "元",
+	}
+
+	// item.Extension.ChargeMode, // 计费模式。 1：包年/包月3：按需10：预留实例
+	huaWeiChargeModeMap = map[string]string{
+		"1":  "包年/包月",
+		"3":  "按需",
+		"10": "预留实例",
+	}
+	//
+	//	item.Extension.BillType,   // 20：退款-变更100：退款-退订税金101：调账-补偿税金102：调账-扣费税金|
+	huaWeiBillTypeMap = map[int32]string{
+		1:   "消费-新购",
+		2:   "消费-续订",
+		3:   "消费-变更",
+		4:   "退款-退订",
+		5:   "消费-使用",
+		8:   "消费-自动续订",
+		9:   "调账-补偿",
+		14:  "消费-服务支持计划月末扣费",
+		15:  "消费-税金",
+		16:  "调账-扣费",
+		17:  "消费-保底差额",
+		20:  "退款-变更",
+		100: "退款-退订税金",
+		101: "调账-补偿税金",
+		102: "调账-扣费税金",
+	}
+)
+
+func exportHuaweiBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
+	requireCount uint64, rate *decimal.Decimal) (any, error) {
+
+	details, err := b.client.DataService().HuaWei.Bill.ListBillItem(kt,
+		&core.ListReq{
+			Filter: filter,
+			Page:   core.NewCountPage(),
+		})
+
+	if err != nil {
+		return nil, err
+	}
+
+	var limit uint64
+	if requireCount <= details.Count {
+		limit = requireCount
+	} else {
+		limit = details.Count
+	}
+
+	result := make([]*billapi.HuaweiBillItem, 0, limit)
+	page := core.DefaultMaxPageLimit
+	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		if limit-offset < uint64(page) {
+			page = uint(limit - offset)
+		}
+		tmpResult, err := b.client.DataService().HuaWei.Bill.ListBillItem(kt,
+			&core.ListReq{
+				Filter: filter,
+				Page: &core.BasePage{
+					Start: uint32(offset),
+					Limit: page,
+				},
+			})
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, tmpResult.Details...)
+	}
+
+	bkBizIDs := make([]int64, 0, len(result))
+	mainAccountIDs := make([]string, 0, len(result))
+	for _, item := range result {
+		bkBizIDs = append(bkBizIDs, item.BkBizID)
+		mainAccountIDs = append(mainAccountIDs, item.MainAccountID)
+	}
+	bizNameMap, err := listBiz(kt, b, bkBizIDs)
+	if err != nil {
+		return nil, err
+	}
+	mainAccountMap, err := listMainAccount(kt, b, mainAccountIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	data := make([][]interface{}, 0, len(result)+1)
+	data = append(data, huaWeiExcelTitle)
+	for _, item := range result {
+		var mainAccountName, mainAccountSite string
+		if mainAccount, ok := mainAccountMap[item.MainAccountID]; ok {
+			mainAccountName = mainAccount.Name
+			mainAccountSite = enumor.MainAccountSiteTypeNameMap[mainAccount.Site]
+		}
+		var tmp = []interface{}{
+			fmt.Sprintf("%d%02d", item.BillYear, item.BillMonth),
+			bizNameMap[item.BkBizID],
+			mainAccountName,
+			mainAccountSite,
+			item.Extension.ProductName,
+			huaWeiMeasureIdMap[*item.Extension.MeasureId], // 金额单位。 1：元
+			item.Extension.UsageType,
+			item.Extension.UsageMeasureId,
+			item.Extension.CloudServiceType,
+			item.Extension.CloudServiceTypeName,
+			item.Extension.Region,
+			item.Extension.RegionName,
+			item.Extension.ResourceType,
+			item.Extension.ResourceTypeName,
+			huaWeiChargeModeMap[*item.Extension.ChargeMode],
+			huaWeiBillTypeMap[*item.Extension.BillType],
+			item.Extension.FreeResourceUsage,
+			item.Extension.Usage,
+			item.Extension.RiUsage,
+			item.Currency,
+			*rate,
+			item.Cost,
+			item.Cost.Mul(*rate),
+		}
+		data = append(data, tmp)
+	}
+
+	buf, err := export.GenerateExcel(data)
+	if err != nil {
+		return nil, err
+	}
+
+	url, err := uploadFileAndReturnUrl(kt, b, buf)
+	if err != nil {
+		return nil, err
+	}
+
+	return url, nil
+}
+
+func exportAzureBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
+	requireCount uint64, rate *decimal.Decimal) (any, error) {
+
+	details, err := b.client.DataService().Azure.Bill.ListBillItem(kt,
+		&core.ListReq{
+			Filter: filter,
+			Page:   core.NewCountPage(),
+		})
+
+	if err != nil {
+		return nil, err
+	}
+
+	var limit uint64
+	if requireCount <= details.Count {
+		limit = requireCount
+	} else {
+		limit = details.Count
+	}
+
+	result := make([]*billapi.AzureBillItem, 0, limit)
+	page := core.DefaultMaxPageLimit
+	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		if limit-offset < uint64(page) {
+			page = uint(limit - offset)
+		}
+		tmpResult, err := b.client.DataService().Azure.Bill.ListBillItem(kt,
+			&core.ListReq{
+				Filter: filter,
+				Page: &core.BasePage{
+					Start: uint32(offset),
+					Limit: page,
+				},
+			})
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, tmpResult.Details...)
+	}
+
+	// var azureExcelTitle = []string{"区域", "地区编码", "核算年月",  "事业群",
+	//"业务部门", "规划产品", "运营产品", "账号邮箱", "子账号名称", "服务一级类别名称",
+	//"服务二级类别名称", "服务三级类别名称", "产品名称", "资源类别", "计量地区",
+	//"资源地区编码", "单位", "用量", "折后税前成本（外币）", "币种", "汇率",
+	//"RMB成本（元）"}
+	data := make([][]interface{}, 0, len(result)+1)
+	data = append(data, azureExcelTitle)
+	// TODO parse data to excel format
+	//for _, item := range result {
+	//	tmp := []interface{}{
+	//		item.Region,
+	//		item.RegionCode,
+	//		item.,
+	//	}
+	//}
+
+	buf, err := export.GenerateExcel(data)
+	if err != nil {
+		return nil, err
+	}
+
+	url, err := uploadFileAndReturnUrl(kt, b, buf)
+	if err != nil {
+		return nil, err
+	}
+
+	return url, nil
+}
+
+func exportGcpBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
+	requireCount uint64, rate *decimal.Decimal) (any, error) {
+
+	details, err := b.client.DataService().Gcp.Bill.ListBillItem(kt,
+		&core.ListReq{
+			Filter: filter,
+			Page:   core.NewCountPage(),
+		})
+
+	if err != nil {
+		return nil, err
+	}
+
+	var limit uint64
+	if requireCount <= details.Count {
+		limit = requireCount
+	} else {
+		limit = details.Count
+	}
+
+	result := make([]*billapi.GcpBillItem, 0, limit)
+	page := core.DefaultMaxPageLimit
+	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		if limit-offset < uint64(page) {
+			page = uint(limit - offset)
+		}
+		tmpResult, err := b.client.DataService().Gcp.Bill.ListBillItem(kt,
+			&core.ListReq{
+				Filter: filter,
+				Page: &core.BasePage{
+					Start: uint32(offset),
+					Limit: page,
+				},
+			})
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, tmpResult.Details...)
+	}
+
+	regionIDs := make([]string, 0, len(result))
+	bkBizIDs := make([]int64, 0, len(result))
+	for _, item := range result {
+		regionIDs = append(regionIDs, *item.Extension.Region)
+		bkBizIDs = append(bkBizIDs, item.BkBizID)
+	}
+	// get region info
+	regions, err := b.client.DataService().Gcp.Region.ListRegion(kt.Ctx, kt.Header(), &core.ListReq{
+		Filter: tools.ExpressionAnd(tools.RuleIn("region_id", slice.Unique(regionIDs))),
+		Page:   core.NewDefaultBasePage(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	regionMap := make(map[string]string, len(regions.Details))
+	for _, region := range regions.Details {
+		regionMap[region.RegionID] = region.RegionName
+	}
+
+	bizNameMap, err := listBiz(kt, b, bkBizIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	//gcpExcelTitle = []interface{}{"核算年月",  "事业群", "业务部门", "规划产品", "运营产品",
+	//"BillingAccountId", "项目ID", "项目名称", "服务分类", "服务分类名称", "Sku名称", "Location", "国家",
+	//"Region代码", "Region位置", "外币类型", "用量单位", "用量", "外币成本(元)", "汇率", "人民币成本(元)"}
+	data := make([][]interface{}, 0, len(result)+1)
+	data = append(data, gcpExcelTitle)
+	for _, item := range result {
+		tmp := []interface{}{
+			item.Extension.Month,
+			bizNameMap[item.BkBizID],
+			item.Extension.BillingAccountID,
+			item.Extension.ProjectID,
+			item.Extension.ProjectName,
+			item.Extension.ServiceDescription, // 服务分类
+			"服务分类名称",
+			item.Extension.SkuDescription,
+			item.Extension.Location,
+			item.Extension.Country,
+			item.Extension.Region,
+			regionMap[*item.Extension.Region],
+			item.Extension.Currency,
+			item.Extension.UsageUnit,
+			item.Extension.UsageAmount,
+			item.Cost,
+			*rate,
+			item.Cost.Mul(*rate),
+		}
+
+		data = append(data, tmp)
+	}
+
+	buf, err := export.GenerateExcel(data)
+	if err != nil {
+		return nil, err
+	}
+
+	url, err := uploadFileAndReturnUrl(kt, b, buf)
+	if err != nil {
+		return nil, err
+	}
+
+	return url, nil
+}
+
+func uploadFileAndReturnUrl(kt *kit.Kit, b *billItemSvc, buf *bytes.Buffer) (
+	any, error) {
+
+	// tmp code
+	file, err := os.Create("b.xlsx")
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	_, err = file.Write(buf.Bytes())
+	if err != nil {
+		return nil, err
+	}
+	// end of tmp code
+
+	// generate filename
+	if err := b.client.DataService().Global.Cos.Upload(kt, "bill_item.xlsx", buf); err != nil {
+		return nil, err
+	}
+
+	// TODO generate url
+
+	return nil, nil
+}
+
+func listMainAccount(kt *kit.Kit, b *billItemSvc, ids []string) (map[string]*accountset.BaseMainAccount, error) {
+	ids = slice.Unique(ids)
+	expression, err := tools.And(
+		tools.RuleIn("id", ids),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	details, err := b.client.DataService().Global.MainAccount.List(kt, &core.ListReq{
+		Filter: expression,
+		Page:   core.NewCountPage(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	total := details.Count
+
+	result := make(map[string]*accountset.BaseMainAccount, total)
+	for offset := uint64(0); offset < total; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		tmpResult, err := b.client.DataService().Global.MainAccount.List(kt, &core.ListReq{
+			Filter: expression,
+			Page: &core.BasePage{
+				Start: uint32(offset),
+				Limit: core.DefaultMaxPageLimit,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range tmpResult.Details {
+			result[item.ID] = item
+		}
+	}
+
+	return result, nil
+}
+
+func listRootAccount(kt *kit.Kit, b *billItemSvc, ids []string) (map[string]*accountset.BaseRootAccount, error) {
+	ids = slice.Unique(ids)
+	expression, err := tools.And(
+		tools.RuleIn("id", ids),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	details, err := b.client.DataService().Global.RootAccount.List(kt, &core.ListWithoutFieldReq{
+		Filter: expression,
+		Page:   core.NewCountPage(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	total := details.Count
+
+	result := make(map[string]*accountset.BaseRootAccount, total)
+	for offset := uint64(0); offset < total; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		tmpResult, err := b.client.DataService().Global.RootAccount.List(kt,
+			&core.ListWithoutFieldReq{
+				Filter: expression,
+				Page: &core.BasePage{
+					Start: uint32(offset),
+					Limit: core.DefaultMaxPageLimit,
+				},
+			})
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range tmpResult.Details {
+			result[item.ID] = item
+		}
+	}
+
+	return result, nil
+}
+
+func listBiz(kt *kit.Kit, b *billItemSvc, ids []int64) (map[int64]string, error) {
+	expression := &cmdb.QueryFilter{
+		Rule: &cmdb.CombinedRule{
+			Condition: "AND",
+			Rules: []cmdb.Rule{
+				&cmdb.AtomRule{
+					Field:    "bk_biz_id",
+					Operator: "in",
+					Value:    slice.Unique(ids),
+				},
+			},
+		},
+	}
+	params := &cmdb.SearchBizParams{
+		BizPropertyFilter: expression,
+		Fields:            []string{"bk_biz_id", "bk_biz_name"},
+	}
+	resp, err := b.esbClient.Cmdb().SearchBusiness(kt, params)
+	if err != nil {
+		return nil, fmt.Errorf("call cmdb search business api failed, err: %v", err)
+	}
+
+	infos := resp.Info
+	data := make(map[int64]string, len(infos))
+	for _, biz := range infos {
+		data[biz.BizID] = biz.BizName
+	}
+
+	return data, nil
+}
