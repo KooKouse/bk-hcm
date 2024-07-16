@@ -71,3 +71,15 @@ type MainAccountSummaryResult struct {
 	MainAccountCloudID   string `json:"main_account_cloud_id" validate:"required"`
 	MainAccountCloudName string `json:"main_account_cloud_name" validate:"required"`
 }
+
+// MainAccountSummaryExportReq export request for main account summary
+type MainAccountSummaryExportReq struct {
+	BillYear  int                `json:"bill_year" validate:"required"`
+	BillMonth int                `json:"bill_month" validate:"required"`
+	Filter    *filter.Expression `json:"filter" validate:"omitempty"`
+}
+
+// Validate ...
+func (req *MainAccountSummaryExportReq) Validate() error {
+	return validator.Validate.Struct(req)
+}

@@ -46,6 +46,8 @@ func InitService(c *capability.Capability) {
 	h.Add("SumRootAccountSummary", http.MethodPost, "/bills/root-account-summarys/sum", svc.SumRootAccountSummary)
 	h.Add("ConfirmRootAccountSummary",
 		http.MethodPost, "bills/root-account-summarys/confirm", svc.ConfirmRootAccountSummary)
+	h.Add("ExportRootAccountSummary", http.MethodPost, "/bills/root-account-summarys/export",
+		svc.ExportRootAccountSummary)
 
 	h.Load(c.WebService)
 }

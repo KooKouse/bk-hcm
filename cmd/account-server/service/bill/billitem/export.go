@@ -22,7 +22,6 @@ package billitem
 import (
 	"bytes"
 	"fmt"
-	"os"
 
 	"hcm/cmd/account-server/logics/bill/export"
 	accountset "hcm/pkg/api/core/account-set"
@@ -643,18 +642,6 @@ func exportGcpBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
 
 func uploadFileAndReturnUrl(kt *kit.Kit, b *billItemSvc, buf *bytes.Buffer) (
 	any, error) {
-
-	// tmp code
-	file, err := os.Create("b.xlsx")
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	_, err = file.Write(buf.Bytes())
-	if err != nil {
-		return nil, err
-	}
-	// end of tmp code
 
 	// generate filename
 	if err := b.client.DataService().Global.Cos.Upload(kt, "bill_item.xlsx", buf); err != nil {

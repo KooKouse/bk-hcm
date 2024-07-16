@@ -20,6 +20,8 @@
 package billsummarymain
 
 import (
+	"fmt"
+
 	asbillapi "hcm/pkg/api/account-server/bill"
 	"hcm/pkg/api/core"
 	accountset "hcm/pkg/api/core/account-set"
@@ -27,10 +29,13 @@ import (
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
+	"hcm/pkg/kit"
 	"hcm/pkg/rest"
+	"hcm/pkg/thirdparty/esb/cmdb"
+	"hcm/pkg/tools/slice"
 )
 
-// ListMainAccountSummary list root account summary with options
+// ListMainAccountSummary list main account summary with options
 func (s *service) ListMainAccountSummary(cts *rest.Contexts) (interface{}, error) {
 	req := new(asbillapi.MainAccountSummaryListReq)
 	if err := cts.DecodeInto(req); err != nil {
@@ -80,20 +85,9 @@ func (s *service) ListMainAccountSummary(cts *rest.Contexts) (interface{}, error
 	}
 
 	// fetch account
-	listOpt := &core.ListReq{
-		Filter: tools.ExpressionAnd(
-			tools.RuleIn("id", accountIDs),
-		),
-		Page: core.NewDefaultBasePage(),
-	}
-	accountResult, err := s.client.DataService().Global.MainAccount.List(cts.Kit, listOpt)
+	accountMap, err := s.fetchMainAccount(cts.Kit, accountIDs)
 	if err != nil {
 		return nil, err
-	}
-
-	accountMap := make(map[string]*accountset.BaseMainAccount, len(accountIDs))
-	for _, detail := range accountResult.Details {
-		accountMap[detail.ID] = detail
 	}
 
 	for _, detail := range summary.Details {
@@ -108,4 +102,54 @@ func (s *service) ListMainAccountSummary(cts *rest.Contexts) (interface{}, error
 	}
 
 	return ret, nil
+}
+
+func (s *service) fetchMainAccount(kt *kit.Kit, accountIDs []string) (map[string]*accountset.BaseMainAccount, error) {
+	listOpt := &core.ListReq{
+		Filter: tools.ExpressionAnd(
+			tools.RuleIn("id", slice.Unique(accountIDs)),
+		),
+		Page: core.NewDefaultBasePage(),
+	}
+	accountResult, err := s.client.DataService().Global.MainAccount.List(kt, listOpt)
+	if err != nil {
+		return nil, err
+	}
+
+	accountMap := make(map[string]*accountset.BaseMainAccount, len(accountResult.Details))
+	for _, detail := range accountResult.Details {
+		accountMap[detail.ID] = detail
+	}
+	return accountMap, nil
+}
+
+func (s *service) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error) {
+	expression := &cmdb.QueryFilter{
+		Rule: &cmdb.CombinedRule{
+			Condition: "AND",
+			Rules: []cmdb.Rule{
+				&cmdb.AtomRule{
+					Field:    "bk_biz_id",
+					Operator: "in",
+					Value:    slice.Unique(ids),
+				},
+			},
+		},
+	}
+	params := &cmdb.SearchBizParams{
+		BizPropertyFilter: expression,
+		Fields:            []string{"bk_biz_id", "bk_biz_name"},
+	}
+	resp, err := s.esbClient.Cmdb().SearchBusiness(kt, params)
+	if err != nil {
+		return nil, fmt.Errorf("call cmdb search business api failed, err: %v", err)
+	}
+
+	infos := resp.Info
+	data := make(map[int64]string, len(infos))
+	for _, biz := range infos {
+		data[biz.BizID] = biz.BizName
+	}
+
+	return data, nil
 }
