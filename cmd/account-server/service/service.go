@@ -46,10 +46,12 @@ import (
 	"hcm/pkg/handler"
 	"hcm/pkg/iam/auth"
 	"hcm/pkg/logs"
+	"hcm/pkg/metrics"
 	"hcm/pkg/rest"
 	restcli "hcm/pkg/rest/client"
 	"hcm/pkg/runtime/shutdown"
 	"hcm/pkg/serviced"
+	"hcm/pkg/thirdparty/esb"
 	"hcm/pkg/tools/ssl"
 
 	"github.com/emicklei/go-restful/v3"
@@ -62,6 +64,7 @@ type Service struct {
 	authorizer  auth.Authorizer
 	audit       logicaudit.Interface
 	billManager *bill.BillManager
+	esbClient   esb.Client
 }
 
 // NewService create a service instance.
@@ -92,6 +95,13 @@ func NewService(sd serviced.ServiceDiscover) (*Service, error) {
 		return nil, err
 	}
 
+	// 创建ESB Client
+	esbConfig := cc.AccountServer().Esb
+	esbClient, err := esb.NewClient(&esbConfig, metrics.Register())
+	if err != nil {
+		return nil, err
+	}
+
 	// start bill manager
 	newBillManager := &bill.BillManager{
 		Sd:     sd,
@@ -108,6 +118,7 @@ func NewService(sd serviced.ServiceDiscover) (*Service, error) {
 		authorizer:  authorizer,
 		audit:       logicaudit.NewAudit(apiClientSet.DataService()),
 		billManager: newBillManager,
+		esbClient:   esbClient,
 	}
 
 	return svr, nil
@@ -189,6 +200,7 @@ func (s *Service) apiSet() *restful.Container {
 		ApiClient:  s.clientSet,
 		Authorizer: s.authorizer,
 		Audit:      s.audit,
+		EsbClient:  s.esbClient,
 	}
 
 	mainaccount.InitService(c)

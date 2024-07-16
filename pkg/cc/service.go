@@ -410,6 +410,7 @@ type AccountServerSetting struct {
 	Service    Service              `yaml:"service"`
 	Controller BillControllerOption `yaml:"contorller"`
 	Log        LogOption            `yaml:"log"`
+	Esb        Esb                  `yaml:"esb"`
 }
 
 // trySetFlagBindIP try set flag bind ip.
