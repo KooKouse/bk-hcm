@@ -105,3 +105,17 @@ const (
 	// BillAdjustmentStateUnconfirmed 未确认
 	BillAdjustmentStateUnconfirmed BillAdjustmentState = "unconfirmed"
 )
+
+var (
+	// BillAdjustmentStateNameMap is the map of bill adjustment state name
+	BillAdjustmentStateNameMap = map[BillAdjustmentState]string{
+		BillAdjustmentStateConfirmed:   "已确认",
+		BillAdjustmentStateUnconfirmed: "未确认",
+	}
+
+	// BillAdjustmentTypeNameMap is the map of bill adjustment type name
+	BillAdjustmentTypeNameMap = map[BillAdjustmentType]string{
+		BillAdjustmentIncrease: "增加",
+		BillAdjustmentDecrease: "减少",
+	}
+)

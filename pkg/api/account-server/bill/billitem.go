@@ -106,3 +106,19 @@ type AdjustmentItemSumResult struct {
 	Count   uint64                                                                       `json:"count"`
 	CostMap map[enumor.BillAdjustmentType]map[enumor.CurrencyCode]*bill.CostWithCurrency `json:"cost_map"`
 }
+
+// AdjustmentItemExportReq ...
+type AdjustmentItemExportReq struct {
+	BillYear    int                `json:"bill_year" validate:"required"`
+	BillMonth   int                `json:"bill_month" validate:"required"`
+	ExportLimit uint64             `json:"export_limit" validate:"omitempty"`
+	Filter      *filter.Expression `json:"filter" validate:"omitempty"`
+}
+
+// Validate ...
+func (req *AdjustmentItemExportReq) Validate() error {
+	if req.ExportLimit > constant.ExcelExportLimit {
+		return errors.New("export limit exceed")
+	}
+	return validator.Validate.Struct(req)
+}
