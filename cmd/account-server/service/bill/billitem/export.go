@@ -22,9 +22,12 @@ package billitem
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"time"
 
 	"hcm/cmd/account-server/logics/bill/export"
 	accountset "hcm/pkg/api/core/account-set"
+	"hcm/pkg/api/data-service/cos"
 	"hcm/pkg/thirdparty/esb/cmdb"
 	"hcm/pkg/tools/slice"
 
@@ -44,22 +47,22 @@ import (
 )
 
 var (
-	gcpExcelTitle = []interface{}{"核算年月", "业务名称", "BillingAccountId",
-		"项目ID", "项目名称", "服务分类", "服务分类名称", "Sku名称", "Location", "国家", "Region代码", "Region位置", "外币类型",
+	commonExcelTitle = []interface{}{"站点类型", "核算年月", "业务名称", "一级帐号名称", "二级帐号名称", "地域"}
+
+	gcpExcelTitle = []interface{}{"Region位置", "项目ID", "项目名称", "服务分类", "服务分类名称", "Sku名称", "外币类型",
 		"用量单位", "用量", "外币成本(元)", "汇率", "人民币成本(元)"}
 
 	azureExcelTitle = []interface{}{"区域", "地区编码", "核算年月", "业务名称",
 		"账号邮箱", "子账号名称", "服务一级类别名称", "服务二级类别名称", "服务三级类别名称", "产品名称", "资源类别",
 		"计量地区", "资源地区编码", "单位", "用量", "折后税前成本（外币）", "币种", "汇率", "RMB成本（元）"}
 
-	huaWeiExcelTitle = []interface{}{"核算年月", "业务名称", "子账号", "账号类型",
-		"产品名称", "金额单位", "使用量类型", "使用量度量单位", "云服务类型编码", "云服务类型名称", "云服务区编码", "云服务区名称",
-		"资源类型编码", "资源类型名称", "计费模式", "账单类型", "套餐内使用量", "使用量", "预留实例使用量", "币种", "汇率",
-		"本期应付外币金额（元）", "本期应付人民币金额（元）"}
+	huaWeiExcelTitle = []interface{}{"产品名称", "云服务区名称", "金额单位", "使用量类型", "使用量度量单位", "云服务类型编码",
+		"云服务类型名称", "资源类型编码", "资源类型名称", "计费模式", "账单类型", "套餐内使用量", "使用量", "预留实例使用量", "币种",
+		"汇率", "本期应付外币金额（元）", "本期应付人民币金额（元）"}
 
-	awsExcelTitle = []interface{}{"核算年月", "业务名称", "主帐号ID", "子帐号ID", "子账户名称", "发票ID", "账单实体",
-		"产品代号", "服务组", "产品名称", "API操作", "产品规格", "实例类型", "地区", "区域", "地区名称", "资源ID",
-		"计费方式", "计费类型", "计费说明", "用量", "单位", "折扣前成本（外币）", "外币种类", "人民币成本（元）", "汇率"}
+	awsExcelTitle = []interface{}{"地区名称", "发票ID", "账单实体", "产品代号", "服务组", "产品名称", "API操作", "产品规格",
+		"实例类型", "资源ID", "计费方式", "计费类型", "计费说明", "用量", "单位", "折扣前成本（外币）", "外币种类",
+		"人民币成本（元）", "汇率"}
 )
 
 // ExportBillItems 导出账单明细
@@ -84,14 +87,18 @@ func (b *billItemSvc) ExportBillItems(cts *rest.Contexts) (any, error) {
 		return nil, err
 	}
 
-	mergedFilter, err := tools.And(
+	var mergedFilter = tools.ExpressionAnd(
 		tools.RuleEqual("vendor", vendor),
 		tools.RuleEqual("bill_year", req.BillYear),
 		tools.RuleEqual("bill_month", req.BillMonth),
-		req.Filter)
-	if err != nil {
-		logs.Errorf("fail merge filter for exporting bill items, err: %v, req: %+v, rid: %s", err, req, cts.Kit.Rid)
-		return nil, err
+	)
+
+	if req.Filter != nil {
+		mergedFilter, err = tools.And(mergedFilter, req.Filter)
+		if err != nil {
+			logs.Errorf("fail merge filter for exporting bill items, err: %v, req: %+v, rid: %s", err, req, cts.Kit.Rid)
+			return nil, err
+		}
 	}
 
 	// 获取汇率
@@ -188,38 +195,35 @@ func exportAwsBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
 	if err != nil {
 		return nil, err
 	}
-
 	mainAccountMap, err := listMainAccount(kt, b, mainAccountIDs)
 	if err != nil {
 		return nil, err
 	}
-
 	rootAccountMap, err := listRootAccount(kt, b, rootAccountIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	// awsExcelTitle = []interface{}{"核算年月", "业务名称", "主帐号ID", "子帐号ID", "子账户名称", "发票ID", "账单实体",
-	//		"产品代号", "服务组", "产品名称", "API操作", "产品规格", "实例类型", "地区", "区域", "地区名称", "资源ID",
-	//		"计费方式", "计费类型", "计费说明", "用量", "单位", "折扣前成本（外币）", "外币种类", "人民币成本（元）", "汇率"}
 	data := make([][]interface{}, 0, len(result)+1)
-	data = append(data, awsExcelTitle)
+	data = append(data, append(commonExcelTitle, awsExcelTitle...))
 	for _, item := range result {
-		var mainAccountID, mainAccountName, rootAccountID string
+		var mainAccountID, rootAccountID, mainAccountSite string
 		if mainAccount, ok := mainAccountMap[item.MainAccountID]; ok {
 			mainAccountID = mainAccount.CloudID
-			mainAccountName = mainAccount.Name
+			mainAccountSite = enumor.MainAccountSiteTypeNameMap[mainAccount.Site]
 		}
 		if rootAccount, ok := rootAccountMap[item.RootAccountID]; ok {
 			rootAccountID = rootAccount.CloudID
 		}
 
 		tmp := []interface{}{
+			mainAccountSite,
 			fmt.Sprintf("%d-%02d", item.BillYear, item.BillMonth),
 			bizNameMap[item.BkBizID],
 			rootAccountID,
 			mainAccountID,
-			mainAccountName,
+			item.Extension.ProductToRegionCode,
+			item.Extension.ProductFromLocation,
 			item.Extension.BillInvoiceId,
 			item.Extension.BillBillingEntity,
 			item.Extension.LineItemProductCode,
@@ -228,9 +232,6 @@ func exportAwsBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
 			"API操作",
 			"产品规格",
 			"实例类型 product_instance_type?",
-			item.Extension.ProductToRegionCode,
-			"区域",
-			item.Extension.ProductFromLocation,
 			item.Extension.LineItemResourceId,
 			item.Extension.PricingTerm,
 			item.Extension.LineItemLineItemType,
@@ -339,8 +340,8 @@ var (
 		"3":  "按需",
 		"10": "预留实例",
 	}
-	//
-	//	item.Extension.BillType,   // 20：退款-变更100：退款-退订税金101：调账-补偿税金102：调账-扣费税金|
+
+	//	item.Extension.BillType,
 	huaWeiBillTypeMap = map[int32]string{
 		1:   "消费-新购",
 		2:   "消费-续订",
@@ -400,10 +401,12 @@ func exportHuaweiBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expressio
 		result = append(result, tmpResult.Details...)
 	}
 
-	bkBizIDs := make([]int64, 0, len(result))
+	rootAccountIDs := make([]string, 0, len(result))
 	mainAccountIDs := make([]string, 0, len(result))
+	bkBizIDs := make([]int64, 0, len(result))
 	for _, item := range result {
 		bkBizIDs = append(bkBizIDs, item.BkBizID)
+		rootAccountIDs = append(rootAccountIDs, item.RootAccountID)
 		mainAccountIDs = append(mainAccountIDs, item.MainAccountID)
 	}
 	bizNameMap, err := listBiz(kt, b, bkBizIDs)
@@ -414,35 +417,43 @@ func exportHuaweiBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expressio
 	if err != nil {
 		return nil, err
 	}
+	rootAccountMap, err := listRootAccount(kt, b, rootAccountIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	data := make([][]interface{}, 0, len(result)+1)
-	data = append(data, huaWeiExcelTitle)
+	data = append(data, append(commonExcelTitle, huaWeiExcelTitle...))
 	for _, item := range result {
-		var mainAccountName, mainAccountSite string
+		var mainAccountID, mainAccountSite, rootAccountID string
 		if mainAccount, ok := mainAccountMap[item.MainAccountID]; ok {
-			mainAccountName = mainAccount.Name
+			mainAccountID = mainAccount.CloudID
 			mainAccountSite = enumor.MainAccountSiteTypeNameMap[mainAccount.Site]
 		}
+		if rootAccount, ok := rootAccountMap[item.RootAccountID]; ok {
+			rootAccountID = rootAccount.CloudID
+		}
 		var tmp = []interface{}{
+			mainAccountSite,
 			fmt.Sprintf("%d%02d", item.BillYear, item.BillMonth),
 			bizNameMap[item.BkBizID],
-			mainAccountName,
-			mainAccountSite,
-			item.Extension.ProductName,
+			rootAccountID,
+			mainAccountID,
+			*item.Extension.RegionName,
+			*item.Extension.ProductName,
+			*item.Extension.Region,
 			huaWeiMeasureIdMap[*item.Extension.MeasureId], // 金额单位。 1：元
-			item.Extension.UsageType,
-			item.Extension.UsageMeasureId,
-			item.Extension.CloudServiceType,
-			item.Extension.CloudServiceTypeName,
-			item.Extension.Region,
-			item.Extension.RegionName,
-			item.Extension.ResourceType,
-			item.Extension.ResourceTypeName,
+			*item.Extension.UsageType,
+			*item.Extension.UsageMeasureId,
+			*item.Extension.CloudServiceType,
+			*item.Extension.CloudServiceTypeName,
+			*item.Extension.ResourceType,
+			*item.Extension.ResourceTypeName,
 			huaWeiChargeModeMap[*item.Extension.ChargeMode],
 			huaWeiBillTypeMap[*item.Extension.BillType],
-			item.Extension.FreeResourceUsage,
-			item.Extension.Usage,
-			item.Extension.RiUsage,
+			*item.Extension.FreeResourceUsage,
+			*item.Extension.Usage,
+			*item.Extension.RiUsage,
 			item.Currency,
 			*rate,
 			item.Cost,
@@ -575,9 +586,13 @@ func exportGcpBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
 
 	regionIDs := make([]string, 0, len(result))
 	bkBizIDs := make([]int64, 0, len(result))
+	rootAccountIDs := make([]string, 0, len(result))
+	mainAccountIDs := make([]string, 0, len(result))
 	for _, item := range result {
 		regionIDs = append(regionIDs, *item.Extension.Region)
 		bkBizIDs = append(bkBizIDs, item.BkBizID)
+		rootAccountIDs = append(rootAccountIDs, item.RootAccountID)
+		mainAccountIDs = append(mainAccountIDs, item.MainAccountID)
 	}
 	// get region info
 	regions, err := b.client.DataService().Gcp.Region.ListRegion(kt.Ctx, kt.Header(), &core.ListReq{
@@ -591,6 +606,14 @@ func exportGcpBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
 	for _, region := range regions.Details {
 		regionMap[region.RegionID] = region.RegionName
 	}
+	mainAccountMap, err := listMainAccount(kt, b, mainAccountIDs)
+	if err != nil {
+		return nil, err
+	}
+	rootAccountMap, err := listRootAccount(kt, b, rootAccountIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	bizNameMap, err := listBiz(kt, b, bkBizIDs)
 	if err != nil {
@@ -601,24 +624,33 @@ func exportGcpBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
 	//"BillingAccountId", "项目ID", "项目名称", "服务分类", "服务分类名称", "Sku名称", "Location", "国家",
 	//"Region代码", "Region位置", "外币类型", "用量单位", "用量", "外币成本(元)", "汇率", "人民币成本(元)"}
 	data := make([][]interface{}, 0, len(result)+1)
-	data = append(data, gcpExcelTitle)
+	data = append(data, append(commonExcelTitle, gcpExcelTitle...))
 	for _, item := range result {
+		var mainAccountID, mainAccountSite, rootAccountID string
+		if mainAccount, ok := mainAccountMap[item.MainAccountID]; ok {
+			mainAccountID = mainAccount.CloudID
+			mainAccountSite = enumor.MainAccountSiteTypeNameMap[mainAccount.Site]
+		}
+		if rootAccount, ok := rootAccountMap[item.RootAccountID]; ok {
+			rootAccountID = rootAccount.CloudID
+		}
+
 		tmp := []interface{}{
+			mainAccountSite,
 			item.Extension.Month,
 			bizNameMap[item.BkBizID],
-			item.Extension.BillingAccountID,
-			item.Extension.ProjectID,
-			item.Extension.ProjectName,
-			item.Extension.ServiceDescription, // 服务分类
-			"服务分类名称",
-			item.Extension.SkuDescription,
-			item.Extension.Location,
-			item.Extension.Country,
-			item.Extension.Region,
+			rootAccountID,
+			mainAccountID,
+			*item.Extension.Region,
 			regionMap[*item.Extension.Region],
-			item.Extension.Currency,
-			item.Extension.UsageUnit,
-			item.Extension.UsageAmount,
+			*item.Extension.ProjectID,
+			*item.Extension.ProjectName,
+			*item.Extension.ServiceDescription, // 服务分类
+			"服务分类名称",
+			*item.Extension.SkuDescription,
+			item.Currency,
+			*item.Extension.UsageUnit,
+			*item.Extension.UsageAmount,
 			item.Cost,
 			*rate,
 			item.Cost.Mul(*rate),
@@ -640,17 +672,34 @@ func exportGcpBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
 	return url, nil
 }
 
-func uploadFileAndReturnUrl(kt *kit.Kit, b *billItemSvc, buf *bytes.Buffer) (
-	any, error) {
+func uploadFileAndReturnUrl(kt *kit.Kit, b *billItemSvc, buf *bytes.Buffer) (string, error) {
+	filename := fmt.Sprintf("bill_item_%s.xlsx", time.Now().Format("20060102150405"))
 
-	// generate filename
-	if err := b.client.DataService().Global.Cos.Upload(kt, "bill_item.xlsx", buf); err != nil {
-		return nil, err
+	file, err := os.Create(filename)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	_, err = file.Write(buf.Bytes())
+	if err != nil {
+		return "", err
 	}
 
-	// TODO generate url
+	// generate filename
+	if err := b.client.DataService().Global.Cos.Upload(kt, filename, buf); err != nil {
+		return "", err
+	}
 
-	return nil, nil
+	result, err := b.client.DataService().Global.Cos.GenerateTemporalUrl(kt, "download",
+		&cos.GenerateTemporalUrlReq{
+			Filename:   filename,
+			TTLSeconds: 3600,
+		})
+	if err != nil {
+		return "", err
+	}
+
+	return result.URL, nil
 }
 
 func listMainAccount(kt *kit.Kit, b *billItemSvc, ids []string) (map[string]*accountset.BaseMainAccount, error) {
