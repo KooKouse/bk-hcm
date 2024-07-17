@@ -85,7 +85,7 @@ func (s *service) ListMainAccountSummary(cts *rest.Contexts) (interface{}, error
 	}
 
 	// fetch account
-	accountMap, err := s.fetchMainAccount(cts.Kit, accountIDs)
+	accountMap, err := s.listMainAccount(cts.Kit, accountIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func (s *service) ListMainAccountSummary(cts *rest.Contexts) (interface{}, error
 	return ret, nil
 }
 
-func (s *service) fetchMainAccount(kt *kit.Kit, accountIDs []string) (map[string]*accountset.BaseMainAccount, error) {
+func (s *service) listMainAccount(kt *kit.Kit, accountIDs []string) (map[string]*accountset.BaseMainAccount, error) {
 	listOpt := &core.ListReq{
 		Filter: tools.ExpressionAnd(
 			tools.RuleIn("id", slice.Unique(accountIDs)),

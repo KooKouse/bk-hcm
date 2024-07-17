@@ -56,6 +56,38 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 		return nil, err
 	}
 
+	result, err := s.fetchRootAccountSummary(cts, req)
+	if err != nil {
+		return nil, err
+	}
+	data := make([][]interface{}, 0, len(result)+1)
+	data = append(data, excelTitle)
+	data = append(data, toRawData(result)...)
+	buf, err := export.GenerateExcel(data)
+	if err != nil {
+		return nil, err
+	}
+
+	filename := fmt.Sprintf("bill_summary_root_%s.xlsx", time.Now().Format("20060102150405"))
+	err = s.client.DataService().Global.Cos.Upload(cts.Kit, filename, buf)
+	if err != nil {
+		return nil, err
+	}
+	url, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download",
+		&cos.GenerateTemporalUrlReq{
+			Filename:   filename,
+			TTLSeconds: 3600,
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	return url.URL, nil
+}
+
+func (s *service) fetchRootAccountSummary(cts *rest.Contexts, req *asbillapi.RootAccountSummaryExportReq) (
+	[]*dsbillapi.BillSummaryRootResult, error) {
+
 	var expression = tools.ExpressionAnd(
 		tools.RuleEqual("bill_year", req.BillYear),
 		tools.RuleEqual("bill_month", req.BillMonth),
@@ -101,30 +133,7 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 		}
 		result = append(result, tmpResult.Details...)
 	}
-
-	data := make([][]interface{}, 0, len(result)+1)
-	data = append(data, excelTitle)
-	data = append(data, toRawData(result)...)
-	buf, err := export.GenerateExcel(data)
-	if err != nil {
-		return nil, err
-	}
-
-	filename := fmt.Sprintf("bill_summary_root_%s.xlsx", time.Now().Format("20060102150405"))
-	err = s.client.DataService().Global.Cos.Upload(cts.Kit, filename, buf)
-	if err != nil {
-		return nil, err
-	}
-	url, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download",
-		&cos.GenerateTemporalUrlReq{
-			Filename:   filename,
-			TTLSeconds: 3600,
-		})
-	if err != nil {
-		return nil, err
-	}
-
-	return url.URL, nil
+	return result, nil
 }
 
 func toRawData(details []*dsbillapi.BillSummaryRootResult) [][]interface{} {

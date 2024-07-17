@@ -43,6 +43,51 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 		return nil, err
 	}
 
+	result, err := b.fetchBillAdjustmentItem(cts, req)
+	if err != nil {
+		return nil, err
+	}
+
+	bizIDs := make([]int64, 0, len(result))
+	mainAccountIDs := make([]string, 0, len(result))
+	for _, detail := range result {
+		bizIDs = append(bizIDs, detail.BkBizID)
+		mainAccountIDs = append(mainAccountIDs, detail.MainAccountID)
+	}
+
+	// fetch main account
+	mainAccountMap, err := b.listMainAccount(cts.Kit, mainAccountIDs)
+	// fetch biz
+	bizMap, err := b.listBiz(cts.Kit, bizIDs)
+
+	data := make([][]interface{}, 0, len(result)+1)
+	data = append(data, excelTitle)
+	data = append(data, toRawData(result, mainAccountMap, bizMap)...)
+	buf, err := export.GenerateExcel(data)
+	if err != nil {
+		return nil, err
+	}
+
+	filename := fmt.Sprintf("bill_adjustment_item__%s.xlsx", time.Now().Format("20060102150405"))
+	err = b.client.DataService().Global.Cos.Upload(cts.Kit, filename, buf)
+	if err != nil {
+		return nil, err
+	}
+	url, err := b.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download",
+		&cos.GenerateTemporalUrlReq{
+			Filename:   filename,
+			TTLSeconds: 3600,
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	return url.URL, nil
+}
+
+func (b *billAdjustmentSvc) fetchBillAdjustmentItem(cts *rest.Contexts, req *bill.AdjustmentItemExportReq) (
+	[]*billcore.AdjustmentItem, error) {
+
 	var expression = tools.ExpressionAnd(
 		tools.RuleEqual("bill_year", req.BillYear),
 		tools.RuleEqual("bill_month", req.BillMonth),
@@ -88,41 +133,7 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 		result = append(result, tmpResult.Details...)
 	}
 
-	bizIDs := make([]int64, 0, len(result))
-	mainAccountIDs := make([]string, 0, len(result))
-	for _, detail := range result {
-		bizIDs = append(bizIDs, detail.BkBizID)
-		mainAccountIDs = append(mainAccountIDs, detail.MainAccountID)
-	}
-
-	// fetch main account
-	mainAccountMap, err := b.listMainAccount(cts.Kit, mainAccountIDs)
-	// fetch biz
-	bizMap, err := b.listBiz(cts.Kit, bizIDs)
-
-	data := make([][]interface{}, 0, len(result)+1)
-	data = append(data, excelTitle)
-	data = append(data, toRawData(result, mainAccountMap, bizMap)...)
-	buf, err := export.GenerateExcel(data)
-	if err != nil {
-		return nil, err
-	}
-
-	filename := fmt.Sprintf("bill_adjustment_item__%s.xlsx", time.Now().Format("20060102150405"))
-	err = b.client.DataService().Global.Cos.Upload(cts.Kit, filename, buf)
-	if err != nil {
-		return nil, err
-	}
-	url, err := b.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download",
-		&cos.GenerateTemporalUrlReq{
-			Filename:   filename,
-			TTLSeconds: 3600,
-		})
-	if err != nil {
-		return nil, err
-	}
-
-	return url.URL, nil
+	return result, nil
 }
 
 func toRawData(details []*billcore.AdjustmentItem, accountMap map[string]*accountset.BaseMainAccount,

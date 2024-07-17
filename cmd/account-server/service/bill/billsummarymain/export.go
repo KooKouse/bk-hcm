@@ -56,6 +56,51 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 		return nil, err
 	}
 
+	result, err := s.fetchMainAccountSummary(cts, req)
+	if err != nil {
+		return nil, err
+	}
+
+	accountIDs := make([]string, 0, len(result))
+	bizIDs := make([]int64, 0, len(result))
+	for _, detail := range result {
+		accountIDs = append(accountIDs, detail.MainAccountID)
+		bizIDs = append(bizIDs, detail.BkBizID)
+	}
+
+	accountMap, err := s.listMainAccount(cts.Kit, accountIDs)
+
+	// fetch biz
+	bizMap, err := s.listBiz(cts.Kit, bizIDs)
+
+	data := make([][]interface{}, 0, len(result)+1)
+	data = append(data, excelTitle)
+	data = append(data, toRawData(result, accountMap, bizMap)...)
+	buf, err := export.GenerateExcel(data)
+	if err != nil {
+		return nil, err
+	}
+
+	filename := fmt.Sprintf("bill_summary_main_%s.xlsx", time.Now().Format("20060102150405"))
+	err = s.client.DataService().Global.Cos.Upload(cts.Kit, filename, buf)
+	if err != nil {
+		return nil, err
+	}
+	url, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download",
+		&cos.GenerateTemporalUrlReq{
+			Filename:   filename,
+			TTLSeconds: 3600,
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	return url.URL, nil
+}
+
+func (s *service) fetchMainAccountSummary(cts *rest.Contexts, req *asbillapi.MainAccountSummaryExportReq) (
+	[]*dsbillapi.BillSummaryMainResult, error) {
+
 	var expression = tools.ExpressionAnd(
 		tools.RuleEqual("bill_year", req.BillYear),
 		tools.RuleEqual("bill_month", req.BillMonth),
@@ -99,42 +144,7 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 		}
 		result = append(result, tmpResult.Details...)
 	}
-
-	accountIDs := make([]string, 0, len(result))
-	bizIDs := make([]int64, 0, len(result))
-	for _, detail := range result {
-		accountIDs = append(accountIDs, detail.MainAccountID)
-		bizIDs = append(bizIDs, detail.BkBizID)
-	}
-
-	accountMap, err := s.fetchMainAccount(cts.Kit, accountIDs)
-
-	// fetch biz
-	bizMap, err := s.listBiz(cts.Kit, bizIDs)
-
-	data := make([][]interface{}, 0, len(result)+1)
-	data = append(data, excelTitle)
-	data = append(data, toRawData(result, accountMap, bizMap)...)
-	buf, err := export.GenerateExcel(data)
-	if err != nil {
-		return nil, err
-	}
-
-	filename := fmt.Sprintf("bill_summary_main_%s.xlsx", time.Now().Format("20060102150405"))
-	err = s.client.DataService().Global.Cos.Upload(cts.Kit, filename, buf)
-	if err != nil {
-		return nil, err
-	}
-	url, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download",
-		&cos.GenerateTemporalUrlReq{
-			Filename:   filename,
-			TTLSeconds: 3600,
-		})
-	if err != nil {
-		return nil, err
-	}
-
-	return url.URL, nil
+	return result, nil
 }
 
 func toRawData(details []*dsbillapi.BillSummaryMainResult, accountMap map[string]*accountset.BaseMainAccount,
