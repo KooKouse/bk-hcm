@@ -20,10 +20,14 @@
 package billsummaryroot
 
 import (
+	"fmt"
+	"time"
+
 	"hcm/cmd/account-server/logics/bill/export"
 	asbillapi "hcm/pkg/api/account-server/bill"
 	"hcm/pkg/api/core"
 	dsbillapi "hcm/pkg/api/data-service/bill"
+	"hcm/pkg/api/data-service/cos"
 	"hcm/pkg/criteria/constant"
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
@@ -39,7 +43,7 @@ var (
 
 // ExportRootAccountSummary export root account summary with options
 func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, error) {
-	req := new(asbillapi.RootAccountSummaryListReq)
+	req := new(asbillapi.RootAccountSummaryExportReq)
 	if err := cts.DecodeInto(req); err != nil {
 		return nil, err
 	}
@@ -72,10 +76,18 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 	if err != nil {
 		return nil, err
 	}
-	// TODO limit the number of data to export
+
+	limit := *details.Count
+	if req.ExportLimit <= limit {
+		limit = req.ExportLimit
+	}
 
 	result := make([]*dsbillapi.BillSummaryRootResult, 0, *details.Count)
-	for offset := uint64(0); offset < *details.Count; offset = offset + uint64(core.DefaultMaxPageLimit) {
+	page := core.DefaultMaxPageLimit
+	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		if limit-offset < uint64(page) {
+			page = uint(limit - offset)
+		}
 		tmpResult, err := s.client.DataService().Global.Bill.ListBillSummaryRoot(cts.Kit,
 			&dsbillapi.BillSummaryRootListReq{
 				Filter: expression,
@@ -98,13 +110,21 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 		return nil, err
 	}
 
-	// TODO generate file name
-	err = s.client.DataService().Global.Cos.Upload(cts.Kit, "test-tmp.xlsx", buf)
+	filename := fmt.Sprintf("bill_summary_root_%s.xlsx", time.Now().Format("20060102150405"))
+	err = s.client.DataService().Global.Cos.Upload(cts.Kit, filename, buf)
+	if err != nil {
+		return nil, err
+	}
+	url, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download",
+		&cos.GenerateTemporalUrlReq{
+			Filename:   filename,
+			TTLSeconds: 3600,
+		})
 	if err != nil {
 		return nil, err
 	}
 
-	return buf, nil
+	return url.URL, nil
 }
 
 func toRawData(details []*dsbillapi.BillSummaryRootResult) [][]interface{} {

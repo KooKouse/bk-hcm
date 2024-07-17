@@ -20,11 +20,15 @@
 package billsummarymain
 
 import (
+	"fmt"
+	"time"
+
 	"hcm/cmd/account-server/logics/bill/export"
 	asbillapi "hcm/pkg/api/account-server/bill"
 	"hcm/pkg/api/core"
 	accountset "hcm/pkg/api/core/account-set"
 	dsbillapi "hcm/pkg/api/data-service/bill"
+	"hcm/pkg/api/data-service/cos"
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
@@ -72,15 +76,22 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 		return nil, err
 	}
 
-	// TODO limit the number of data to export
+	limit := details.Count
+	if req.ExportLimit <= limit {
+		limit = req.ExportLimit
+	}
 
 	result := make([]*dsbillapi.BillSummaryMainResult, 0, len(details.Details))
-	for offset := uint64(0); offset < details.Count; offset = offset + uint64(core.DefaultMaxPageLimit) {
+	page := core.DefaultMaxPageLimit
+	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		if limit-offset < uint64(page) {
+			page = uint(limit - offset)
+		}
 		tmpResult, err := s.client.DataService().Global.Bill.ListBillSummaryMain(cts.Kit, &dsbillapi.BillSummaryMainListReq{
 			Filter: expression,
 			Page: &core.BasePage{
 				Start: uint32(offset),
-				Limit: core.DefaultMaxPageLimit,
+				Limit: page,
 			},
 		})
 		if err != nil {
@@ -109,13 +120,21 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 		return nil, err
 	}
 
-	// TODO generate file name
-	err = s.client.DataService().Global.Cos.Upload(cts.Kit, "test-tmp.xlsx", buf)
+	filename := fmt.Sprintf("bill_summary_main_%s.xlsx", time.Now().Format("20060102150405"))
+	err = s.client.DataService().Global.Cos.Upload(cts.Kit, filename, buf)
+	if err != nil {
+		return nil, err
+	}
+	url, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download",
+		&cos.GenerateTemporalUrlReq{
+			Filename:   filename,
+			TTLSeconds: 3600,
+		})
 	if err != nil {
 		return nil, err
 	}
 
-	return buf, nil
+	return url.URL, nil
 }
 
 func toRawData(details []*dsbillapi.BillSummaryMainResult, accountMap map[string]*accountset.BaseMainAccount,
@@ -123,11 +142,14 @@ func toRawData(details []*dsbillapi.BillSummaryMainResult, accountMap map[string
 
 	data := make([][]interface{}, 0, len(details))
 	for _, detail := range details {
-		account := accountMap[detail.MainAccountID]
+		var mainAccountID, mainAccountName string
+		if mainAccount, ok := accountMap[detail.MainAccountID]; ok {
+			mainAccountID = mainAccount.CloudID
+		}
 		bizName := bizMap[detail.BkBizID]
 		tmp := []interface{}{
-			account.CloudID,
-			account.Name,
+			mainAccountID,
+			mainAccountName,
 			detail.RootAccountID,
 			detail.MainAccountName,
 			bizName,

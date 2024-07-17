@@ -156,11 +156,9 @@ func exportAwsBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
 		return nil, err
 	}
 
-	var limit uint64
-	if requireCount <= details.Count {
+	limit := details.Count
+	if requireCount <= limit {
 		limit = requireCount
-	} else {
-		limit = details.Count
 	}
 
 	result := make([]*billapi.AwsBillItem, 0, limit)
@@ -272,11 +270,9 @@ func exportZenlayerBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Express
 		return nil, err
 	}
 
-	var limit uint64
-	if requireCount <= details.Count {
+	limit := details.Count
+	if requireCount <= limit {
 		limit = requireCount
-	} else {
-		limit = details.Count
 	}
 
 	result := make([]*billapi.ZenlayerBillItem, 0, limit)
@@ -374,11 +370,9 @@ func exportHuaweiBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expressio
 		return nil, err
 	}
 
-	var limit uint64
-	if requireCount <= details.Count {
+	limit := details.Count
+	if requireCount <= limit {
 		limit = requireCount
-	} else {
-		limit = details.Count
 	}
 
 	result := make([]*billapi.HuaweiBillItem, 0, limit)
@@ -488,11 +482,9 @@ func exportAzureBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression
 		return nil, err
 	}
 
-	var limit uint64
-	if requireCount <= details.Count {
+	limit := details.Count
+	if requireCount <= limit {
 		limit = requireCount
-	} else {
-		limit = details.Count
 	}
 
 	result := make([]*billapi.AzureBillItem, 0, limit)
@@ -557,11 +549,9 @@ func exportGcpBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
 		return nil, err
 	}
 
-	var limit uint64
-	if requireCount <= details.Count {
+	limit := details.Count
+	if requireCount <= limit {
 		limit = requireCount
-	} else {
-		limit = details.Count
 	}
 
 	result := make([]*billapi.GcpBillItem, 0, limit)

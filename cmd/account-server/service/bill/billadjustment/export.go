@@ -63,15 +63,23 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 		return nil, err
 	}
 
-	// TODO limit the number of data to export
+	limit := details.Count
+	if req.ExportLimit <= limit {
+		limit = req.ExportLimit
+	}
+
 	result := make([]*billcore.AdjustmentItem, 0, len(details.Details))
-	for offset := uint64(0); offset < details.Count; offset = offset + uint64(core.DefaultMaxPageLimit) {
+	page := core.DefaultMaxPageLimit
+	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		if limit-offset < uint64(page) {
+			page = uint(limit - offset)
+		}
 		tmpResult, err := b.client.DataService().Global.Bill.ListBillAdjustmentItem(cts.Kit,
 			&dsbillapi.BillAdjustmentItemListReq{
 				Filter: expression,
 				Page: &core.BasePage{
 					Start: uint32(offset),
-					Limit: core.DefaultMaxPageLimit,
+					Limit: page,
 				},
 			})
 		if err != nil {
@@ -100,9 +108,7 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 		return nil, err
 	}
 
-	// TODO generate file name
-	filename := fmt.Sprintf("bill_adjustment_item_%d_%d_%s.xlsx",
-		req.BillYear, req.BillMonth, time.Now().Format("20060102150405"))
+	filename := fmt.Sprintf("bill_adjustment_item__%s.xlsx", time.Now().Format("20060102150405"))
 	err = b.client.DataService().Global.Cos.Upload(cts.Kit, filename, buf)
 	if err != nil {
 		return nil, err

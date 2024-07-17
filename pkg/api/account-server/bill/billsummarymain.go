@@ -20,9 +20,12 @@
 package bill
 
 import (
+	"errors"
+
 	"hcm/pkg/api/core"
 	billcore "hcm/pkg/api/core/bill"
 	"hcm/pkg/api/data-service/bill"
+	"hcm/pkg/criteria/constant"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/criteria/validator"
 	"hcm/pkg/runtime/filter"
@@ -74,12 +77,16 @@ type MainAccountSummaryResult struct {
 
 // MainAccountSummaryExportReq export request for main account summary
 type MainAccountSummaryExportReq struct {
-	BillYear  int                `json:"bill_year" validate:"required"`
-	BillMonth int                `json:"bill_month" validate:"required"`
-	Filter    *filter.Expression `json:"filter" validate:"omitempty"`
+	BillYear    int                `json:"bill_year" validate:"required"`
+	BillMonth   int                `json:"bill_month" validate:"required"`
+	ExportLimit uint64             `json:"export_limit" validate:"omitempty"`
+	Filter      *filter.Expression `json:"filter" validate:"omitempty"`
 }
 
 // Validate ...
 func (req *MainAccountSummaryExportReq) Validate() error {
+	if req.ExportLimit > constant.ExcelExportLimit {
+		return errors.New("export limit exceed")
+	}
 	return validator.Validate.Struct(req)
 }

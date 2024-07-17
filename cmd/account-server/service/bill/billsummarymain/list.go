@@ -91,12 +91,16 @@ func (s *service) ListMainAccountSummary(cts *rest.Contexts) (interface{}, error
 	}
 
 	for _, detail := range summary.Details {
-		account := accountMap[detail.MainAccountID]
+		var mainAccountCloudID, mainAccountCloudName string
+		if mainAccount, ok := accountMap[detail.MainAccountID]; ok {
+			mainAccountCloudID = mainAccount.CloudID
+			mainAccountCloudName = mainAccount.Name
+		}
 
 		tmp := &asbillapi.MainAccountSummaryResult{
 			BillSummaryMainResult: *detail,
-			MainAccountCloudID:    account.CloudID,
-			MainAccountCloudName:  account.Name,
+			MainAccountCloudID:    mainAccountCloudID,
+			MainAccountCloudName:  mainAccountCloudName,
 		}
 		ret.Details = append(ret.Details, tmp)
 	}
