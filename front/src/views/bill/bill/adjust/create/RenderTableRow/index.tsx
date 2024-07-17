@@ -79,6 +79,13 @@ export default defineComponent({
       },
     );
 
+    watch(
+      () => props.rootAccountId,
+      () => {
+        formModel.main_account_id = '';
+      },
+    );
+
     expose({
       getValue: async () => {
         return await Promise.all([
@@ -119,6 +126,7 @@ export default defineComponent({
           <td>
             <InputColumn
               type='number'
+              min={0}
               precision={3}
               ref={costRef}
               v-model={formModel.cost}

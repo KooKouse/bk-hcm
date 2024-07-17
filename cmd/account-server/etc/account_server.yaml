@@ -62,6 +62,14 @@ log:
   # log level.
   verbosity: 0
 
+
+# bill controller
+controller:
+  controllerSyncDuration:
+  mainAccountSummarySyncDuration:
+  rootAccountSummarySyncDuration:
+  dailySummarySyncDuration:
+
 # defines esb related settings.
 esb:
   # endpoints is a seed list of host:port addresses of esb nodes.

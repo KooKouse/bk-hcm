@@ -1,4 +1,4 @@
-import { PropType, Ref, defineComponent, inject, provide, reactive, ref, watch } from 'vue';
+import { PropType, Ref, defineComponent, inject, nextTick, provide, reactive, ref, watch } from 'vue';
 import { Form, Message, Select } from 'bkui-vue';
 import PrimaryAccountSelector from '../../components/search/primary-account-selector';
 import VendorRadioGroup from '@/components/vendor-radio-group';
@@ -44,6 +44,9 @@ export default defineComponent({
 
     const triggerShow = (v: boolean) => {
       isShow.value = v;
+      nextTick(() => {
+        formRef.value?.clearValidate();
+      });
     };
     const costSum = reactive({
       increaseSum: 0,
@@ -69,6 +72,8 @@ export default defineComponent({
               bill_year: bill_year.value,
               bill_month: bill_month.value,
               ...formModel,
+              product_id: !!row.product_id ? row.product_id : undefined,
+              bk_biz_id: !!row.bk_biz_id ? row.bk_biz_id : undefined,
             };
           }),
         };
@@ -93,7 +98,7 @@ export default defineComponent({
     const reset = () => {
       resetForm();
       // emit('clearEdit');
-      tableRef.value.reset();
+      tableRef.value?.reset();
     };
 
     watch(
@@ -114,6 +119,7 @@ export default defineComponent({
 
     return () => (
       <CommonSideslider
+        renderType='if'
         v-model:isShow={isShow.value}
         width={1280}
         title='新增调账'
@@ -123,13 +129,20 @@ export default defineComponent({
           default: () => (
             <Form formType='vertical' ref={formRef} model={formModel}>
               <Form.FormItem label={t('云厂商')} required property='vendor'>
-                <VendorRadioGroup v-model={formModel.vendor} />
+                <VendorRadioGroup
+                  disabled={props.edit}
+                  v-model={formModel.vendor}
+                  onUpdate:modelValue={() => {
+                    if (!props.edit) formModel.root_account_id = '';
+                  }}
+                />
               </Form.FormItem>
               <Form.FormItem label={t('一级账号')} required property='root_account_id'>
                 <PrimaryAccountSelector
+                  disabled={props.edit}
                   v-model={formModel.root_account_id}
                   multiple={false}
-                  vendor={[formModel.vendor]}
+                  vendor={formModel.vendor}
                   autoSelect={!props.edit}
                 />
               </Form.FormItem>

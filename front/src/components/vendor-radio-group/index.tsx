@@ -19,6 +19,7 @@ export default defineComponent({
       type: String as PropType<'small' | 'normal'>,
       default: 'normal',
     },
+    disabled: Boolean,
   },
   emits: ['update:modelValue'],
   setup(props, { emit }) {
@@ -32,7 +33,6 @@ export default defineComponent({
       { label: t('华为云'), value: VendorEnum.HUAWEI, icon: vendorHuawei },
       { label: t('亚马逊云'), value: VendorEnum.AWS, icon: vendorAWS },
       { label: t('zenlayer'), value: VendorEnum.ZENLAYER, icon: vendorTcloud },
-      { label: t('腾讯云'), value: VendorEnum.TCLOUD, icon: vendorTcloud },
     ]);
 
     watch(vendor, (v) => emit('update:modelValue', v), { deep: true });
@@ -53,7 +53,11 @@ export default defineComponent({
         ]}
         v-model={vendor.value}>
         {buttons.value.map(({ label, value, icon }) => (
-          <Button class={cssModule.radio} selected={vendor.value === value} onClick={() => (vendor.value = value)}>
+          <Button
+            class={cssModule.radio}
+            selected={vendor.value === value}
+            onClick={() => (vendor.value = value)}
+            disabled={props.disabled}>
             <img src={icon} alt='' />
             <span>{label}</span>
           </Button>
