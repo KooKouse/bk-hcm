@@ -190,4 +190,14 @@ var (
 		BillAdjustmentIncrease: "增加",
 		BillAdjustmentDecrease: "减少",
 	}
+
+	// RootAccountBillSummaryStateMap 一级账号账单汇总状态中文名
+	RootAccountBillSummaryStateMap = map[RootBillSummaryState]string{
+		RootAccountBillSummaryStateAccounting: "核算中",
+		RootAccountBillSummaryStateAccounted:  "已核算",
+		RootAccountBillSummaryStateConfirmed:  "已确认",
+		RootAccountBillSummaryStateSyncing:    "同步中",
+		RootAccountBillSummaryStateSynced:     "已同步",
+		RootAccountBillSummaryStateStop:       "停止中",
+	}
 )

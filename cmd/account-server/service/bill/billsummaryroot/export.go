@@ -28,7 +28,7 @@ import (
 	"hcm/pkg/api/core"
 	dsbillapi "hcm/pkg/api/data-service/bill"
 	"hcm/pkg/api/data-service/cos"
-	"hcm/pkg/criteria/constant"
+	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
@@ -133,7 +133,7 @@ func toRawData(details []*dsbillapi.BillSummaryRootResult) [][]interface{} {
 		tmp := []interface{}{
 			detail.RootAccountID,
 			detail.RootAccountName,
-			constant.RootAccountBillSummaryStateMap[detail.State],
+			enumor.RootAccountBillSummaryStateMap[detail.State],
 			detail.CurrentMonthRMBCostSynced,
 			detail.LastMonthRMBCostSynced,
 			detail.CurrentMonthCostSynced,
@@ -141,8 +141,8 @@ func toRawData(details []*dsbillapi.BillSummaryRootResult) [][]interface{} {
 			detail.MonthOnMonthValue,
 			detail.CurrentMonthRMBCost,
 			detail.CurrentMonthCost,
-			detail.AjustmentRMBCost,
-			detail.AjustmentCost,
+			detail.AdjustmentRMBCost,
+			detail.AdjustmentCost,
 		}
 
 		data = append(data, tmp)
