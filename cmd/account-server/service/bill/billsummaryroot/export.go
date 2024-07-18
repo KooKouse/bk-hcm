@@ -33,10 +33,12 @@ import (
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
 	"hcm/pkg/rest"
+
+	"github.com/TencentBlueKing/gopkg/conv"
 )
 
 var (
-	excelTitle = []interface{}{"一级账号ID", "一级账号名称", "账号状态", "账单同步（人民币-元）当月", "账单同步（人民币-元）上月",
+	excelHeader = []string{"一级账号ID", "一级账号名称", "账号状态", "账单同步（人民币-元）当月", "账单同步（人民币-元）上月",
 		"账单同步（美金-美元）当月", "账单同步（美金-美元）上月", "账单同步环比", "当前账单人民币（元）", "当前账单美金（美元）",
 		"调账人民币（元）", "调账美金（美元）"}
 )
@@ -60,15 +62,15 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 	if err != nil {
 		return nil, err
 	}
-	data := make([][]interface{}, 0, len(result)+1)
-	data = append(data, excelTitle)
+	data := make([][]string, 0, len(result)+1)
+	data = append(data, excelHeader)
 	data = append(data, toRawData(result)...)
-	buf, err := export.GenerateExcel(data)
+	buf, err := export.GenerateCSV(data)
 	if err != nil {
 		return nil, err
 	}
 
-	filename := fmt.Sprintf("bill_summary_root_%s.xlsx", time.Now().Format("20060102150405"))
+	filename := fmt.Sprintf("bill_summary_root_%s.csv", time.Now().Format("20060102150405"))
 	err = s.client.DataService().Global.Cos.Upload(cts.Kit, filename, buf)
 	if err != nil {
 		return nil, err
@@ -136,22 +138,22 @@ func (s *service) fetchRootAccountSummary(cts *rest.Contexts, req *asbillapi.Roo
 	return result, nil
 }
 
-func toRawData(details []*dsbillapi.BillSummaryRootResult) [][]interface{} {
-	data := make([][]interface{}, 0, len(details))
+func toRawData(details []*dsbillapi.BillSummaryRootResult) [][]string {
+	data := make([][]string, 0, len(details))
 	for _, detail := range details {
-		tmp := []interface{}{
+		tmp := []string{
 			detail.RootAccountID,
 			detail.RootAccountName,
 			enumor.RootAccountBillSummaryStateMap[detail.State],
-			detail.CurrentMonthRMBCostSynced,
-			detail.LastMonthRMBCostSynced,
-			detail.CurrentMonthCostSynced,
-			detail.LastMonthCostSynced,
-			detail.MonthOnMonthValue,
-			detail.CurrentMonthRMBCost,
-			detail.CurrentMonthCost,
-			detail.AdjustmentRMBCost,
-			detail.AdjustmentCost,
+			detail.CurrentMonthRMBCostSynced.String(),
+			detail.LastMonthRMBCostSynced.String(),
+			detail.CurrentMonthCostSynced.String(),
+			detail.LastMonthCostSynced.String(),
+			conv.ToString(detail.MonthOnMonthValue),
+			detail.CurrentMonthRMBCost.String(),
+			detail.CurrentMonthCost.String(),
+			detail.AdjustmentRMBCost.String(),
+			detail.AdjustmentCost.String(),
 		}
 
 		data = append(data, tmp)

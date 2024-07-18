@@ -47,20 +47,20 @@ import (
 )
 
 var (
-	commonExcelTitle = []interface{}{"站点类型", "核算年月", "业务名称", "一级帐号名称", "二级帐号名称", "地域"}
+	commonExcelHeader = []string{"站点类型", "核算年月", "业务名称", "一级帐号名称", "二级帐号名称", "地域"}
 
-	gcpExcelTitle = []interface{}{"Region位置", "项目ID", "项目名称", "服务分类", "服务分类名称", "Sku名称", "外币类型",
+	gcpExcelHeader = []string{"Region位置", "项目ID", "项目名称", "服务分类", "服务分类名称", "Sku名称", "外币类型",
 		"用量单位", "用量", "外币成本(元)", "汇率", "人民币成本(元)"}
 
-	azureExcelTitle = []interface{}{"区域", "地区编码", "核算年月", "业务名称",
+	azureExcelHeader = []string{"区域", "地区编码", "核算年月", "业务名称",
 		"账号邮箱", "子账号名称", "服务一级类别名称", "服务二级类别名称", "服务三级类别名称", "产品名称", "资源类别",
 		"计量地区", "资源地区编码", "单位", "用量", "折后税前成本（外币）", "币种", "汇率", "RMB成本（元）"}
 
-	huaWeiExcelTitle = []interface{}{"产品名称", "云服务区名称", "金额单位", "使用量类型", "使用量度量单位", "云服务类型编码",
+	huaWeiExcelHeader = []string{"产品名称", "云服务区名称", "金额单位", "使用量类型", "使用量度量单位", "云服务类型编码",
 		"云服务类型名称", "资源类型编码", "资源类型名称", "计费模式", "账单类型", "套餐内使用量", "使用量", "预留实例使用量", "币种",
 		"汇率", "本期应付外币金额（元）", "本期应付人民币金额（元）"}
 
-	awsExcelTitle = []interface{}{"地区名称", "发票ID", "账单实体", "产品代号", "服务组", "产品名称", "API操作", "产品规格",
+	awsExcelHeader = []string{"地区名称", "发票ID", "账单实体", "产品代号", "服务组", "产品名称", "API操作", "产品规格",
 		"实例类型", "资源ID", "计费方式", "计费类型", "计费说明", "用量", "单位", "折扣前成本（外币）", "外币种类",
 		"人民币成本（元）", "汇率"}
 )
@@ -181,13 +181,13 @@ func exportZenlayerBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Express
 		result = append(result, tmpResult.Details...)
 	}
 
-	// var azureExcelTitle = []string{"区域", "地区编码", "核算年月",  "事业群",
+	// var azureExcelHeader = []string{"区域", "地区编码", "核算年月",  "事业群",
 	//"业务部门", "规划产品", "运营产品", "账号邮箱", "子账号名称", "服务一级类别名称",
 	//"服务二级类别名称", "服务三级类别名称", "产品名称", "资源类别", "计量地区",
 	//"资源地区编码", "单位", "用量", "折后税前成本（外币）", "币种", "汇率",
 	//"RMB成本（元）"}
 	data := make([][]interface{}, 0, len(result)+1)
-	data = append(data, azureExcelTitle)
+	//data = append(data, azureExcelHeader)
 	// TODO parse data to excel format
 	//for _, item := range result {
 	//	tmp := []interface{}{
@@ -281,13 +281,8 @@ func exportAzureBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression
 		result = append(result, tmpResult.Details...)
 	}
 
-	// var azureExcelTitle = []string{"区域", "地区编码", "核算年月",  "事业群",
-	//"业务部门", "规划产品", "运营产品", "账号邮箱", "子账号名称", "服务一级类别名称",
-	//"服务二级类别名称", "服务三级类别名称", "产品名称", "资源类别", "计量地区",
-	//"资源地区编码", "单位", "用量", "折后税前成本（外币）", "币种", "汇率",
-	//"RMB成本（元）"}
 	data := make([][]interface{}, 0, len(result)+1)
-	data = append(data, azureExcelTitle)
+	//data = append(data, azureExcelHeader)
 	// TODO parse data to excel format
 	//for _, item := range result {
 	//	tmp := []interface{}{
@@ -311,7 +306,7 @@ func exportAzureBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression
 }
 
 func uploadFileAndReturnUrl(kt *kit.Kit, b *billItemSvc, buf *bytes.Buffer) (string, error) {
-	filename := fmt.Sprintf("bill_item_%s.xlsx", time.Now().Format("20060102150405"))
+	filename := fmt.Sprintf("bill_item_%s.csv", time.Now().Format("20060102150405"))
 
 	file, err := os.Create(filename)
 	if err != nil {

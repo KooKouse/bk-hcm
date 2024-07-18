@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	excelTitle = []interface{}{"更新时间", "调账ID", "业务", "二级账号名称", "调账类型",
+	excelHeader = []string{"更新时间", "调账ID", "业务", "二级账号名称", "调账类型",
 		"操作人", "金额", "币种", "调账状态"}
 )
 
@@ -60,15 +60,15 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 	// fetch biz
 	bizMap, err := b.listBiz(cts.Kit, bizIDs)
 
-	data := make([][]interface{}, 0, len(result)+1)
-	data = append(data, excelTitle)
+	data := make([][]string, 0, len(result)+1)
+	data = append(data, excelHeader)
 	data = append(data, toRawData(result, mainAccountMap, bizMap)...)
-	buf, err := export.GenerateExcel(data)
+	buf, err := export.GenerateCSV(data)
 	if err != nil {
 		return nil, err
 	}
 
-	filename := fmt.Sprintf("bill_adjustment_item__%s.xlsx", time.Now().Format("20060102150405"))
+	filename := fmt.Sprintf("bill_adjustment_item__%s.csv", time.Now().Format("20060102150405"))
 	err = b.client.DataService().Global.Cos.Upload(cts.Kit, filename, buf)
 	if err != nil {
 		return nil, err
@@ -137,9 +137,9 @@ func (b *billAdjustmentSvc) fetchBillAdjustmentItem(cts *rest.Contexts, req *bil
 }
 
 func toRawData(details []*billcore.AdjustmentItem, accountMap map[string]*accountset.BaseMainAccount,
-	bizMap map[int64]string) [][]interface{} {
+	bizMap map[int64]string) [][]string {
 
-	data := make([][]interface{}, 0, len(details))
+	data := make([][]string, 0, len(details))
 	for _, detail := range details {
 		bizName := bizMap[detail.BkBizID]
 		var mainAccountID string
@@ -147,14 +147,14 @@ func toRawData(details []*billcore.AdjustmentItem, accountMap map[string]*accoun
 			mainAccountID = mainAccount.CloudID
 		}
 
-		tmp := []interface{}{
+		tmp := []string{
 			detail.UpdatedAt,
 			detail.ID,
 			bizName,
 			mainAccountID,
 			enumor.BillAdjustmentTypeNameMap[detail.Type],
 			detail.Operator,
-			detail.Cost,
+			detail.Cost.String(),
 			detail.Currency,
 			enumor.BillAdjustmentStateNameMap[detail.State],
 		}

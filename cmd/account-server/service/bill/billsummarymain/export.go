@@ -36,7 +36,7 @@ import (
 )
 
 var (
-	excelTitle = []interface{}{"二级账号ID", "二级账号名称", "一级账号ID", "一级账号名称", "业务",
+	excelHeader = []string{"二级账号ID", "二级账号名称", "一级账号ID", "一级账号名称", "业务",
 		"已确认账单人民币（元）", "已确认账单美金（美元）", "当前账单人民币（元）", "当前账单美金（美元）"}
 )
 
@@ -73,15 +73,15 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 	// fetch biz
 	bizMap, err := s.listBiz(cts.Kit, bizIDs)
 
-	data := make([][]interface{}, 0, len(result)+1)
-	data = append(data, excelTitle)
+	data := make([][]string, 0, len(result)+1)
+	data = append(data, excelHeader)
 	data = append(data, toRawData(result, accountMap, bizMap)...)
-	buf, err := export.GenerateExcel(data)
+	buf, err := export.GenerateCSV(data)
 	if err != nil {
 		return nil, err
 	}
 
-	filename := fmt.Sprintf("bill_summary_main_%s.xlsx", time.Now().Format("20060102150405"))
+	filename := fmt.Sprintf("bill_summary_main_%s.csv", time.Now().Format("20060102150405"))
 	err = s.client.DataService().Global.Cos.Upload(cts.Kit, filename, buf)
 	if err != nil {
 		return nil, err
@@ -148,25 +148,25 @@ func (s *service) fetchMainAccountSummary(cts *rest.Contexts, req *asbillapi.Mai
 }
 
 func toRawData(details []*dsbillapi.BillSummaryMainResult, accountMap map[string]*accountset.BaseMainAccount,
-	bizMap map[int64]string) [][]interface{} {
+	bizMap map[int64]string) [][]string {
 
-	data := make([][]interface{}, 0, len(details))
+	data := make([][]string, 0, len(details))
 	for _, detail := range details {
 		var mainAccountID, mainAccountName string
 		if mainAccount, ok := accountMap[detail.MainAccountID]; ok {
 			mainAccountID = mainAccount.CloudID
 		}
 		bizName := bizMap[detail.BkBizID]
-		tmp := []interface{}{
+		tmp := []string{
 			mainAccountID,
 			mainAccountName,
 			detail.RootAccountID,
 			detail.MainAccountName,
 			bizName,
-			detail.CurrentMonthRMBCostSynced,
-			detail.CurrentMonthCostSynced,
-			detail.CurrentMonthRMBCost,
-			detail.CurrentMonthCost,
+			detail.CurrentMonthRMBCostSynced.String(),
+			detail.CurrentMonthCostSynced.String(),
+			detail.CurrentMonthRMBCost.String(),
+			detail.CurrentMonthCost.String(),
 		}
 
 		data = append(data, tmp)

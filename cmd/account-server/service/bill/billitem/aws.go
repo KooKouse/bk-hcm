@@ -43,11 +43,11 @@ func exportAwsBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
 		return nil, err
 	}
 
-	data := make([][]interface{}, 0, len(result)+1)
-	data = append(data, append(commonExcelTitle, awsExcelTitle...))
+	data := make([][]string, 0, len(result)+1)
+	data = append(data, append(commonExcelHeader, awsExcelHeader...))
 	data = append(data, convertAwsBillItems(result, bizNameMap, mainAccountMap, rootAccountMap, rate)...)
 
-	buf, err := export.GenerateExcel(data)
+	buf, err := export.GenerateCSV(data)
 	if err != nil {
 		return nil, err
 	}
@@ -62,9 +62,9 @@ func exportAwsBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
 
 func convertAwsBillItems(items []*billapi.AwsBillItem, bizNameMap map[int64]string,
 	mainAccountMap map[string]*protocore.BaseMainAccount, rootAccountMap map[string]*protocore.BaseRootAccount,
-	rate *decimal.Decimal) [][]interface{} {
+	rate *decimal.Decimal) [][]string {
 
-	result := make([][]interface{}, 0, len(items))
+	result := make([][]string, 0, len(items))
 	for _, item := range items {
 		var mainAccountID, rootAccountID, mainAccountSite string
 		if mainAccount, ok := mainAccountMap[item.MainAccountID]; ok {
@@ -75,7 +75,7 @@ func convertAwsBillItems(items []*billapi.AwsBillItem, bizNameMap map[int64]stri
 			rootAccountID = rootAccount.CloudID
 		}
 
-		tmp := []interface{}{
+		tmp := []string{
 			mainAccountSite,
 			fmt.Sprintf("%d-%02d", item.BillYear, item.BillMonth),
 			bizNameMap[item.BkBizID],
@@ -97,10 +97,10 @@ func convertAwsBillItems(items []*billapi.AwsBillItem, bizNameMap map[int64]stri
 			item.Extension.LineItemLineItemDescription,
 			item.Extension.LineItemUsageAmount,
 			item.Extension.PricingUnit,
-			item.Cost,
-			item.Currency,
-			item.Cost.Mul(*rate),
-			*rate,
+			item.Cost.String(),
+			string(item.Currency),
+			item.Cost.Mul(*rate).String(),
+			rate.String(),
 		}
 		result = append(result, tmp)
 	}

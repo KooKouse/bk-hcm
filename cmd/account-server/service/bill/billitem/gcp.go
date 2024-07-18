@@ -58,11 +58,11 @@ func exportGcpBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
 		return nil, err
 	}
 
-	data := make([][]interface{}, 0, len(result)+1)
-	data = append(data, append(commonExcelTitle, gcpExcelTitle...))
+	data := make([][]string, 0, len(result)+1)
+	data = append(data, append(commonExcelHeader, gcpExcelHeader...))
 	data = append(data, convertGcpBillItem(result, bizNameMap, mainAccountMap, rootAccountMap, regionMap, rate)...)
 
-	buf, err := export.GenerateExcel(data)
+	buf, err := export.GenerateCSV(data)
 	if err != nil {
 		return nil, err
 	}
@@ -77,9 +77,9 @@ func exportGcpBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
 
 func convertGcpBillItem(items []*billapi.GcpBillItem, bizNameMap map[int64]string,
 	mainAccountMap map[string]*protocore.BaseMainAccount, rootAccountMap map[string]*protocore.BaseRootAccount,
-	regionMap map[string]string, rate *decimal.Decimal) [][]interface{} {
+	regionMap map[string]string, rate *decimal.Decimal) [][]string {
 
-	result := make([][]interface{}, 0, len(items))
+	result := make([][]string, 0, len(items))
 	for _, item := range items {
 		var mainAccountID, mainAccountSite, rootAccountID string
 		if mainAccount, ok := mainAccountMap[item.MainAccountID]; ok {
@@ -90,9 +90,9 @@ func convertGcpBillItem(items []*billapi.GcpBillItem, bizNameMap map[int64]strin
 			rootAccountID = rootAccount.CloudID
 		}
 
-		tmp := []interface{}{
+		tmp := []string{
 			mainAccountSite,
-			item.Extension.Month,
+			*item.Extension.Month,
 			bizNameMap[item.BkBizID],
 			rootAccountID,
 			mainAccountID,
@@ -103,12 +103,12 @@ func convertGcpBillItem(items []*billapi.GcpBillItem, bizNameMap map[int64]strin
 			*item.Extension.ServiceDescription, // 服务分类
 			"服务分类名称",
 			*item.Extension.SkuDescription,
-			item.Currency,
+			string(item.Currency),
 			*item.Extension.UsageUnit,
-			*item.Extension.UsageAmount,
-			item.Cost,
-			*rate,
-			item.Cost.Mul(*rate),
+			item.Extension.UsageAmount.String(),
+			item.Cost.String(),
+			rate.String(),
+			item.Cost.Mul(*rate).String(),
 		}
 
 		result = append(result, tmp)

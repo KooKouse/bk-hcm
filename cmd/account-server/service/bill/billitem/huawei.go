@@ -11,6 +11,7 @@ import (
 	"hcm/pkg/kit"
 	"hcm/pkg/runtime/filter"
 
+	"github.com/TencentBlueKing/gopkg/conv"
 	"github.com/shopspring/decimal"
 )
 
@@ -43,11 +44,11 @@ func exportHuaweiBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expressio
 		return nil, err
 	}
 
-	data := make([][]interface{}, 0, len(result)+1)
-	data = append(data, append(commonExcelTitle, huaWeiExcelTitle...))
+	data := make([][]string, 0, len(result)+1)
+	data = append(data, append(commonExcelHeader, huaWeiExcelHeader...))
 	data = append(data, convertHuaweiBillItems(result, bizNameMap, mainAccountMap, rootAccountMap, rate)...)
 
-	buf, err := export.GenerateExcel(data)
+	buf, err := export.GenerateCSV(data)
 	if err != nil {
 		return nil, err
 	}
@@ -62,9 +63,9 @@ func exportHuaweiBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expressio
 
 func convertHuaweiBillItems(items []*billapi.HuaweiBillItem, bizNameMap map[int64]string,
 	mainAccountMap map[string]*protocore.BaseMainAccount, rootAccountMap map[string]*protocore.BaseRootAccount,
-	rate *decimal.Decimal) [][]interface{} {
+	rate *decimal.Decimal) [][]string {
 
-	result := make([][]interface{}, 0, len(items))
+	result := make([][]string, 0, len(items))
 	for _, item := range items {
 		var mainAccountID, mainAccountSite, rootAccountID string
 		if mainAccount, ok := mainAccountMap[item.MainAccountID]; ok {
@@ -74,7 +75,7 @@ func convertHuaweiBillItems(items []*billapi.HuaweiBillItem, bizNameMap map[int6
 		if rootAccount, ok := rootAccountMap[item.RootAccountID]; ok {
 			rootAccountID = rootAccount.CloudID
 		}
-		var tmp = []interface{}{
+		var tmp = []string{
 			mainAccountSite,
 			fmt.Sprintf("%d%02d", item.BillYear, item.BillMonth),
 			bizNameMap[item.BkBizID],
@@ -85,20 +86,20 @@ func convertHuaweiBillItems(items []*billapi.HuaweiBillItem, bizNameMap map[int6
 			*item.Extension.Region,
 			huaWeiMeasureIdMap[*item.Extension.MeasureId], // 金额单位。 1：元
 			*item.Extension.UsageType,
-			*item.Extension.UsageMeasureId,
+			conv.ToString(*item.Extension.UsageMeasureId),
 			*item.Extension.CloudServiceType,
 			*item.Extension.CloudServiceTypeName,
 			*item.Extension.ResourceType,
 			*item.Extension.ResourceTypeName,
 			huaWeiChargeModeMap[*item.Extension.ChargeMode],
 			huaWeiBillTypeMap[*item.Extension.BillType],
-			*item.Extension.FreeResourceUsage,
-			*item.Extension.Usage,
-			*item.Extension.RiUsage,
-			item.Currency,
-			*rate,
-			item.Cost,
-			item.Cost.Mul(*rate),
+			conv.ToString(*item.Extension.FreeResourceUsage),
+			conv.ToString(*item.Extension.Usage),
+			conv.ToString(*item.Extension.RiUsage),
+			string(item.Currency),
+			rate.String(),
+			item.Cost.String(),
+			item.Cost.Mul(*rate).String(),
 		}
 		result = append(result, tmp)
 	}
