@@ -21,11 +21,10 @@ func GenerateExcel(data [][]interface{}) (*bytes.Buffer, error) {
 		return nil, err
 	}
 
-	row := 1
 	// 写入数据到 Excel
-	for _, rowData := range data {
+	for row, rowData := range data {
 		for col, value := range rowData {
-			cell, err := excelize.CoordinatesToCellName(col+1, row)
+			cell, err := excelize.CoordinatesToCellName(col+1, row+1)
 			if err != nil {
 				return nil, err
 			}
@@ -33,7 +32,6 @@ func GenerateExcel(data [][]interface{}) (*bytes.Buffer, error) {
 				return nil, err
 			}
 		}
-		row++
 	}
 
 	return f.WriteToBuffer()
