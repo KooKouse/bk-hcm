@@ -22,7 +22,6 @@ package billitem
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"time"
 
 	"hcm/cmd/account-server/logics/bill/export"
@@ -307,17 +306,6 @@ func exportAzureBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression
 
 func uploadFileAndReturnUrl(kt *kit.Kit, b *billItemSvc, buf *bytes.Buffer) (string, error) {
 	filename := fmt.Sprintf("bill_item_%s.csv", time.Now().Format("20060102150405"))
-
-	file, err := os.Create(filename)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	_, err = file.Write(buf.Bytes())
-	if err != nil {
-		return "", err
-	}
-
 	// generate filename
 	if err := b.client.DataService().Global.Cos.Upload(kt, filename, buf); err != nil {
 		return "", err
