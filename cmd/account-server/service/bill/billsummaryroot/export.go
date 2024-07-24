@@ -84,7 +84,7 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 		return nil, err
 	}
 
-	return url.URL, nil
+	return asbillapi.BillExportResult{DownloadURL: url.URL}, nil
 }
 
 func (s *service) fetchRootAccountSummary(cts *rest.Contexts, req *asbillapi.RootAccountSummaryExportReq) (

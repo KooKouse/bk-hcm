@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"hcm/cmd/account-server/logics/bill/export"
+	"hcm/pkg/api/account-server/bill"
 	"hcm/pkg/api/core"
 	protocore "hcm/pkg/api/core/account-set"
 	billapi "hcm/pkg/api/core/bill"
@@ -58,7 +59,7 @@ func exportHuaweiBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expressio
 		return nil, err
 	}
 
-	return url, nil
+	return bill.BillExportResult{DownloadURL: url}, nil
 }
 
 func convertHuaweiBillItems(items []*billapi.HuaweiBillItem, bizNameMap map[int64]string,

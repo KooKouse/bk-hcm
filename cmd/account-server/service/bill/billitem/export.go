@@ -324,6 +324,9 @@ func uploadFileAndReturnUrl(kt *kit.Kit, b *billItemSvc, buf *bytes.Buffer) (str
 }
 
 func listMainAccount(kt *kit.Kit, b *billItemSvc, ids []string) (map[string]*accountset.BaseMainAccount, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
 	ids = slice.Unique(ids)
 	expression, err := tools.And(
 		tools.RuleIn("id", ids),
@@ -362,6 +365,9 @@ func listMainAccount(kt *kit.Kit, b *billItemSvc, ids []string) (map[string]*acc
 }
 
 func listRootAccount(kt *kit.Kit, b *billItemSvc, ids []string) (map[string]*accountset.BaseRootAccount, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
 	ids = slice.Unique(ids)
 	expression, err := tools.And(
 		tools.RuleIn("id", ids),

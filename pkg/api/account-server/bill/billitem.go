@@ -122,3 +122,8 @@ func (req *AdjustmentItemExportReq) Validate() error {
 	}
 	return validator.Validate.Struct(req)
 }
+
+// BillExportResult ...
+type BillExportResult struct {
+	DownloadURL string `json:"download_url"`
+}

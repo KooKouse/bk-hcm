@@ -82,7 +82,7 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 		return nil, err
 	}
 
-	return url.URL, nil
+	return bill.BillExportResult{DownloadURL: url.URL}, nil
 }
 
 func (b *billAdjustmentSvc) fetchBillAdjustmentItem(cts *rest.Contexts, req *bill.AdjustmentItemExportReq) (
