@@ -29,6 +29,7 @@ import (
 	accountset "hcm/pkg/api/core/account-set"
 	dsbillapi "hcm/pkg/api/data-service/bill"
 	"hcm/pkg/api/data-service/cos"
+	"hcm/pkg/criteria/constant"
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
@@ -81,7 +82,8 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 		return nil, err
 	}
 
-	filename := fmt.Sprintf("bill_summary_main_%s.csv", time.Now().Format("20060102150405"))
+	filename := fmt.Sprintf("%s/bill_summary_main_%s.csv", constant.BillExportFolderPrefix,
+		time.Now().Format("20060102150405"))
 	err = s.client.DataService().Global.Cos.Upload(cts.Kit, filename, buf)
 	if err != nil {
 		return nil, err
