@@ -19,6 +19,7 @@ import (
 	"hcm/pkg/kit"
 	"hcm/pkg/rest"
 	"hcm/pkg/thirdparty/esb/cmdb"
+	"hcm/pkg/tools/encode"
 	"hcm/pkg/tools/slice"
 )
 
@@ -71,8 +72,15 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 
 	filename := fmt.Sprintf("%s/bill_adjustment_item__%s.csv", constant.BillExportFolderPrefix,
 		time.Now().Format("20060102150405"))
-	err = b.client.DataService().Global.Cos.Upload(cts.Kit, filename, buf)
+	base64Str, err := encode.ReaderToBase64Str(buf)
 	if err != nil {
+		return nil, err
+	}
+	if err = b.client.DataService().Global.Cos.Upload(cts.Kit,
+		&cos.UploadFileReq{
+			Filename:   filename,
+			FileBase64: base64Str,
+		}); err != nil {
 		return nil, err
 	}
 	url, err := b.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download",

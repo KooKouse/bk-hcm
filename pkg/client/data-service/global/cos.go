@@ -1,8 +1,6 @@
 package global
 
 import (
-	"bytes"
-
 	"hcm/pkg/api/data-service/cos"
 	"hcm/pkg/client/common"
 	"hcm/pkg/kit"
@@ -22,9 +20,9 @@ func NewCosClient(client rest.ClientInterface) *CosClient {
 }
 
 // Upload ...
-func (a *CosClient) Upload(kt *kit.Kit, filename string, request *bytes.Buffer) error {
-	return common.RequestNoResp[bytes.Buffer](
-		a.client, rest.POST, kt, request, "/cos/upload/%s", filename)
+func (a *CosClient) Upload(kt *kit.Kit, req *cos.UploadFileReq) error {
+	return common.RequestNoResp[cos.UploadFileReq](
+		a.client, rest.POST, kt, req, "/cos/upload")
 }
 
 // GenerateTemporalUrl ...

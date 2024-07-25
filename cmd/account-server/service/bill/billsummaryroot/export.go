@@ -34,6 +34,7 @@ import (
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
 	"hcm/pkg/rest"
+	"hcm/pkg/tools/encode"
 
 	"github.com/TencentBlueKing/gopkg/conv"
 )
@@ -73,8 +74,15 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 
 	filename := fmt.Sprintf("%s/bill_summary_root_%s.csv", constant.BillExportFolderPrefix,
 		time.Now().Format("20060102150405"))
-	err = s.client.DataService().Global.Cos.Upload(cts.Kit, filename, buf)
+	base64Str, err := encode.ReaderToBase64Str(buf)
 	if err != nil {
+		return nil, err
+	}
+	if err = s.client.DataService().Global.Cos.Upload(cts.Kit,
+		&cos.UploadFileReq{
+			Filename:   filename,
+			FileBase64: base64Str,
+		}); err != nil {
 		return nil, err
 	}
 	url, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download",

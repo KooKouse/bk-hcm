@@ -29,6 +29,7 @@ import (
 	"hcm/pkg/api/data-service/cos"
 	"hcm/pkg/criteria/constant"
 	"hcm/pkg/thirdparty/esb/cmdb"
+	"hcm/pkg/tools/encode"
 	"hcm/pkg/tools/slice"
 
 	"hcm/pkg/api/account-server/bill"
@@ -308,8 +309,15 @@ func exportAzureBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression
 func uploadFileAndReturnUrl(kt *kit.Kit, b *billItemSvc, buf *bytes.Buffer) (string, error) {
 	filename := fmt.Sprintf("%s/bill_item_%s.csv", constant.BillExportFolderPrefix,
 		time.Now().Format("20060102150405"))
-	// generate filename
-	if err := b.client.DataService().Global.Cos.Upload(kt, filename, buf); err != nil {
+	base64Str, err := encode.ReaderToBase64Str(buf)
+	if err != nil {
+		return "", err
+	}
+	if err = b.client.DataService().Global.Cos.Upload(kt,
+		&cos.UploadFileReq{
+			Filename:   filename,
+			FileBase64: base64Str,
+		}); err != nil {
 		return "", err
 	}
 
