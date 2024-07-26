@@ -6,7 +6,7 @@
 
 ### URL
 
-POST /api/v1/account/vendors/{vendor}/bills/adjustment_items/export
+POST /api/v1/account/bills/adjustment_items/export
 
 ### 输入参数
 
