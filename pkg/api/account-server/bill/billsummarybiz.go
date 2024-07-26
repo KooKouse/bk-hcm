@@ -17,3 +17,16 @@ type BizSummaryListReq struct {
 func (req *BizSummaryListReq) Validate() error {
 	return validator.Validate.Struct(req)
 }
+
+// BizSummaryExportReq export request for biz summary
+type BizSummaryExportReq struct {
+	BillYear    int     `json:"bill_year" validate:"required"`
+	BillMonth   int     `json:"bill_month" validate:"required"`
+	ExportLimit uint64  `json:"export_limit" validate:"omitempty"`
+	BKBizIDs    []int64 `json:"bk_biz_ids" validate:"required"`
+}
+
+// Validate ...
+func (req *BizSummaryExportReq) Validate() error {
+	return validator.Validate.Struct(req)
+}
