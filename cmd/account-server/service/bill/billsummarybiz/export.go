@@ -2,7 +2,6 @@ package billsummarybiz
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	"hcm/cmd/account-server/logics/bill/export"
@@ -63,15 +62,6 @@ func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 	data = append(data, toRawData(result, bizMap)...)
 	buf, err := export.GenerateCSV(data)
 	if err != nil {
-		return nil, err
-	}
-
-	file, err := os.Create("bill.csv")
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := file.Write(buf.Bytes()); err != nil {
 		return nil, err
 	}
 
