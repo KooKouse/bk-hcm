@@ -22,13 +22,11 @@ package billitem
 import (
 	"hcm/pkg/api/account-server/bill"
 	"hcm/pkg/api/core"
+	databill "hcm/pkg/api/data-service/bill"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/criteria/errf"
-	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
-	"hcm/pkg/logs"
 	"hcm/pkg/rest"
-	"hcm/pkg/runtime/filter"
 )
 
 // ListBillItems 查询账单明细
@@ -52,20 +50,15 @@ func (b *billItemSvc) ListBillItems(cts *rest.Contexts) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	expressions := []filter.RuleFactory{
-		tools.RuleEqual("vendor", vendor),
-		tools.RuleEqual("bill_year", req.BillYear),
-		tools.RuleEqual("bill_month", req.BillMonth),
+
+	billListReq := &databill.BillItemListReq{
+		ItemCommonOpt: &databill.ItemCommonOpt{
+			Vendor: vendor,
+			Year:   req.BillYear,
+			Month:  req.BillMonth,
+		},
+		ListReq: &core.ListReq{Filter: req.Filter, Page: req.Page},
 	}
-	if req.Filter != nil {
-		expressions = append(expressions, req.Filter)
-	}
-	mergedFilter, err := tools.And(expressions...)
-	if err != nil {
-		logs.Errorf("fail merge filter for listing bill items, err: %v, req: %+v, rid: %s", err, req, cts.Kit.Rid)
-		return nil, err
-	}
-	billListReq := &core.ListReq{Filter: mergedFilter, Page: req.Page}
 
 	return b.client.DataService().Global.Bill.ListBillItemRaw(cts.Kit, billListReq)
 
