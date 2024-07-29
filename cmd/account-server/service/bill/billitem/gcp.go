@@ -27,23 +27,28 @@ func exportGcpBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq
 	rootAccountIDs := make([]string, 0, len(result))
 	mainAccountIDs := make([]string, 0, len(result))
 	for _, item := range result {
-		regionIDs = append(regionIDs, *item.Extension.Region)
+		if item.Extension.GcpRawBillItem != nil {
+			regionIDs = append(regionIDs, *item.Extension.Region)
+		}
 		bkBizIDs = append(bkBizIDs, item.BkBizID)
 		rootAccountIDs = append(rootAccountIDs, item.RootAccountID)
 		mainAccountIDs = append(mainAccountIDs, item.MainAccountID)
 	}
 	// get region info
-	regions, err := b.client.DataService().Gcp.Region.ListRegion(kt.Ctx, kt.Header(), &core.ListReq{
-		Filter: tools.ExpressionAnd(tools.RuleIn("region_id", slice.Unique(regionIDs))),
-		Page:   core.NewDefaultBasePage(),
-	})
-	if err != nil {
-		return nil, err
+	regionMap := make(map[string]string)
+	if len(regionIDs) > 0 {
+		regions, err := b.client.DataService().Gcp.Region.ListRegion(kt.Ctx, kt.Header(), &core.ListReq{
+			Filter: tools.ExpressionAnd(tools.RuleIn("region_id", slice.Unique(regionIDs))),
+			Page:   core.NewDefaultBasePage(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, region := range regions.Details {
+			regionMap[region.RegionID] = region.RegionName
+		}
 	}
-	regionMap := make(map[string]string, len(regions.Details))
-	for _, region := range regions.Details {
-		regionMap[region.RegionID] = region.RegionName
-	}
+
 	mainAccountMap, err := listMainAccount(kt, b, mainAccountIDs)
 	if err != nil {
 		return nil, err
@@ -89,23 +94,27 @@ func convertGcpBillItem(items []*billapi.GcpBillItem, bizNameMap map[int64]strin
 		if rootAccount, ok := rootAccountMap[item.RootAccountID]; ok {
 			rootAccountID = rootAccount.CloudID
 		}
+		extension := item.Extension.GcpRawBillItem
+		if extension == nil {
+			extension = &billapi.GcpRawBillItem{}
+		}
 
 		tmp := []string{
 			mainAccountSite,
-			*item.Extension.Month,
+			safeToString(extension.Month),
 			bizNameMap[item.BkBizID],
 			rootAccountID,
 			mainAccountID,
-			*item.Extension.Region,
-			regionMap[*item.Extension.Region],
-			*item.Extension.ProjectID,
-			*item.Extension.ProjectName,
-			*item.Extension.ServiceDescription, // 服务分类
+			safeToString(extension.Region),
+			regionMap[safeToString(extension.Region)],
+			safeToString(extension.ProjectID),
+			safeToString(extension.ProjectName),
+			safeToString(extension.ServiceDescription), // 服务分类
 			"服务分类名称",
-			*item.Extension.SkuDescription,
+			safeToString(extension.SkuDescription),
 			string(item.Currency),
-			*item.Extension.UsageUnit,
-			item.Extension.UsageAmount.String(),
+			safeToString(extension.UsageUnit),
+			safeToString(extension.UsageAmount),
 			item.Cost.String(),
 			rate.String(),
 			item.Cost.Mul(*rate).String(),

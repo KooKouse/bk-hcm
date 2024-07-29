@@ -449,3 +449,69 @@ func listBiz(kt *kit.Kit, b *billItemSvc, ids []int64) (map[int64]string, error)
 
 	return data, nil
 }
+
+func safeToInt(value interface{}) int {
+	if value == nil {
+		return 0
+	}
+	switch v := value.(type) {
+	case int:
+		return v
+	case int8:
+		return int(v)
+	case int16:
+		return int(v)
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case *int:
+		if v != nil {
+			return *v
+		}
+	case *int8:
+		if v != nil {
+			return int(*v)
+		}
+	case *int16:
+		if v != nil {
+			return int(*v)
+		}
+	case *int32:
+		if v != nil {
+			return int(*v)
+		}
+	case *int64:
+		if v != nil {
+			return int(*v)
+		}
+	default:
+		logs.Warnf("unknown type %T, value %v", v, value)
+		return 0
+	}
+	return 0
+}
+
+func safeToString(value interface{}) string {
+	if value == nil {
+		return ""
+	}
+	switch v := value.(type) {
+	case string:
+		return v
+	case *string:
+		if v == nil {
+			return ""
+		}
+		return *v
+	case *decimal.Decimal:
+		if v == nil {
+			return ""
+		}
+		return v.String()
+	default:
+		// 对于其他类型，尝试转换为字符串
+		logs.Warnf("unknown type %T, value %v", v, value)
+		return fmt.Sprintf("%v", value)
+	}
+}

@@ -13,6 +13,7 @@ import (
 	"hcm/pkg/kit"
 
 	"github.com/TencentBlueKing/gopkg/conv"
+	"github.com/huaweicloud/huaweicloud-sdk-go-v3/services/bssintl/v2/model"
 	"github.com/shopspring/decimal"
 )
 
@@ -75,27 +76,33 @@ func convertHuaweiBillItems(items []*billapi.HuaweiBillItem, bizNameMap map[int6
 		if rootAccount, ok := rootAccountMap[item.RootAccountID]; ok {
 			rootAccountID = rootAccount.CloudID
 		}
+
+		extension := item.Extension.ResFeeRecordV2
+		if extension == nil {
+			extension = &model.ResFeeRecordV2{}
+		}
+
 		var tmp = []string{
 			mainAccountSite,
 			fmt.Sprintf("%d%02d", item.BillYear, item.BillMonth),
 			bizNameMap[item.BkBizID],
 			rootAccountID,
 			mainAccountID,
-			*item.Extension.RegionName,
-			*item.Extension.ProductName,
-			*item.Extension.Region,
-			huaWeiMeasureIdMap[*item.Extension.MeasureId], // 金额单位。 1：元
-			*item.Extension.UsageType,
-			conv.ToString(*item.Extension.UsageMeasureId),
-			*item.Extension.CloudServiceType,
-			*item.Extension.CloudServiceTypeName,
-			*item.Extension.ResourceType,
-			*item.Extension.ResourceTypeName,
-			huaWeiChargeModeMap[*item.Extension.ChargeMode],
-			huaWeiBillTypeMap[*item.Extension.BillType],
-			conv.ToString(*item.Extension.FreeResourceUsage),
-			conv.ToString(*item.Extension.Usage),
-			conv.ToString(*item.Extension.RiUsage),
+			safeToString(extension.RegionName),
+			safeToString(extension.ProductName),
+			safeToString(extension.Region),
+			huaWeiMeasureIdMap[int32(safeToInt(extension.MeasureId))], // 金额单位。 1：元
+			safeToString(extension.UsageType),
+			conv.ToString(safeToString(extension.UsageMeasureId)),
+			safeToString(extension.CloudServiceType),
+			safeToString(extension.CloudServiceTypeName),
+			safeToString(extension.ResourceType),
+			safeToString(extension.ResourceTypeName),
+			huaWeiChargeModeMap[safeToString(extension.ChargeMode)],
+			huaWeiBillTypeMap[int32(safeToInt(extension.BillType))],
+			conv.ToString(safeToString(extension.FreeResourceUsage)),
+			conv.ToString(safeToString(extension.Usage)),
+			conv.ToString(safeToString(extension.RiUsage)),
 			string(item.Currency),
 			rate.String(),
 			item.Cost.String(),

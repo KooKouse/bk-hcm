@@ -75,28 +75,33 @@ func convertAwsBillItems(items []*billapi.AwsBillItem, bizNameMap map[int64]stri
 			rootAccountID = rootAccount.CloudID
 		}
 
+		extension := item.Extension.AwsRawBillItem
+		if extension == nil {
+			extension = &billapi.AwsRawBillItem{}
+		}
+
 		tmp := []string{
 			mainAccountSite,
 			fmt.Sprintf("%d-%02d", item.BillYear, item.BillMonth),
 			bizNameMap[item.BkBizID],
 			rootAccountID,
 			mainAccountID,
-			item.Extension.ProductToRegionCode,
-			item.Extension.ProductFromLocation,
-			item.Extension.BillInvoiceId,
-			item.Extension.BillBillingEntity,
-			item.Extension.LineItemProductCode,
-			item.Extension.ProductProductFamily,
-			item.Extension.ProductProductName,
+			extension.ProductToRegionCode,
+			extension.ProductFromLocation,
+			extension.BillInvoiceId,
+			extension.BillBillingEntity,
+			extension.LineItemProductCode,
+			extension.ProductProductFamily,
+			extension.ProductProductName,
 			"API操作",
 			"产品规格",
 			"实例类型 product_instance_type?",
-			item.Extension.LineItemResourceId,
-			item.Extension.PricingTerm,
-			item.Extension.LineItemLineItemType,
-			item.Extension.LineItemLineItemDescription,
-			item.Extension.LineItemUsageAmount,
-			item.Extension.PricingUnit,
+			extension.LineItemResourceId,
+			extension.PricingTerm,
+			extension.LineItemLineItemType,
+			extension.LineItemLineItemDescription,
+			extension.LineItemUsageAmount,
+			extension.PricingUnit,
 			item.Cost.String(),
 			string(item.Currency),
 			item.Cost.Mul(*rate).String(),
