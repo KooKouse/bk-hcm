@@ -8,18 +8,17 @@ import (
 	"hcm/pkg/api/core"
 	protocore "hcm/pkg/api/core/account-set"
 	billapi "hcm/pkg/api/core/bill"
+	databill "hcm/pkg/api/data-service/bill"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/kit"
-	"hcm/pkg/runtime/filter"
 
 	"github.com/TencentBlueKing/gopkg/conv"
 	"github.com/shopspring/decimal"
 )
 
-func exportHuaweiBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
-	requireCount uint64, rate *decimal.Decimal) (any, error) {
+func exportHuaweiBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq, rate *decimal.Decimal) (any, error) {
 
-	result, err := fetchHuaweiBillItems(kt, b, filter, requireCount)
+	result, err := fetchHuaweiBillItems(kt, b, req)
 	if err != nil {
 		return nil, err
 	}
@@ -107,22 +106,25 @@ func convertHuaweiBillItems(items []*billapi.HuaweiBillItem, bizNameMap map[int6
 	return result
 }
 
-func fetchHuaweiBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
-	requireCount uint64) ([]*billapi.HuaweiBillItem, error) {
+func fetchHuaweiBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq) (
+	[]*billapi.HuaweiBillItem, error) {
 
-	details, err := b.client.DataService().HuaWei.Bill.ListBillItem(kt,
-		&core.ListReq{
-			Filter: filter,
-			Page:   core.NewCountPage(),
-		})
-
+	billListReq := &databill.BillItemListReq{
+		ItemCommonOpt: &databill.ItemCommonOpt{
+			Vendor: enumor.HuaWei,
+			Year:   req.BillYear,
+			Month:  req.BillMonth,
+		},
+		ListReq: &core.ListReq{Filter: req.Filter, Page: core.NewCountPage()},
+	}
+	details, err := b.client.DataService().HuaWei.Bill.ListBillItem(kt, billListReq)
 	if err != nil {
 		return nil, err
 	}
 
 	limit := details.Count
-	if requireCount <= limit {
-		limit = requireCount
+	if req.ExportLimit <= limit {
+		limit = req.ExportLimit
 	}
 
 	result := make([]*billapi.HuaweiBillItem, 0, limit)
@@ -131,14 +133,11 @@ func fetchHuaweiBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression
 		if limit-offset < uint64(page) {
 			page = uint(limit - offset)
 		}
-		tmpResult, err := b.client.DataService().HuaWei.Bill.ListBillItem(kt,
-			&core.ListReq{
-				Filter: filter,
-				Page: &core.BasePage{
-					Start: uint32(offset),
-					Limit: page,
-				},
-			})
+		billListReq.Page = &core.BasePage{
+			Start: uint32(offset),
+			Limit: page,
+		}
+		tmpResult, err := b.client.DataService().HuaWei.Bill.ListBillItem(kt, billListReq)
 		if err != nil {
 			return nil, err
 		}

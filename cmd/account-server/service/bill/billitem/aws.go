@@ -8,17 +8,16 @@ import (
 	"hcm/pkg/api/core"
 	protocore "hcm/pkg/api/core/account-set"
 	billapi "hcm/pkg/api/core/bill"
+	databill "hcm/pkg/api/data-service/bill"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/kit"
-	"hcm/pkg/runtime/filter"
 
 	"github.com/shopspring/decimal"
 )
 
-func exportAwsBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
-	requireCount uint64, rate *decimal.Decimal) (any, error) {
+func exportAwsBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq, rate *decimal.Decimal) (any, error) {
 
-	result, err := fetchAwsBillItems(kt, b, filter, requireCount)
+	result, err := fetchAwsBillItems(kt, b, req)
 	if err != nil {
 		return nil, err
 	}
@@ -108,22 +107,25 @@ func convertAwsBillItems(items []*billapi.AwsBillItem, bizNameMap map[int64]stri
 	return result
 }
 
-func fetchAwsBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
-	requireCount uint64) ([]*billapi.AwsBillItem, error) {
+func fetchAwsBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq) ([]*billapi.AwsBillItem, error) {
 
-	details, err := b.client.DataService().Aws.Bill.ListBillItem(kt,
-		&core.ListReq{
-			Filter: filter,
-			Page:   core.NewCountPage(),
-		})
+	billListReq := &databill.BillItemListReq{
+		ItemCommonOpt: &databill.ItemCommonOpt{
+			Vendor: enumor.Aws,
+			Year:   req.BillYear,
+			Month:  req.BillMonth,
+		},
+		ListReq: &core.ListReq{Filter: req.Filter, Page: core.NewCountPage()},
+	}
+	details, err := b.client.DataService().Aws.Bill.ListBillItem(kt, billListReq)
 
 	if err != nil {
 		return nil, err
 	}
 
 	limit := details.Count
-	if requireCount <= limit {
-		limit = requireCount
+	if req.ExportLimit <= limit {
+		limit = req.ExportLimit
 	}
 
 	result := make([]*billapi.AwsBillItem, 0, limit)
@@ -132,14 +134,11 @@ func fetchAwsBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
 		if limit-offset < uint64(page) {
 			page = uint(limit - offset)
 		}
-		tmpResult, err := b.client.DataService().Aws.Bill.ListBillItem(kt,
-			&core.ListReq{
-				Filter: filter,
-				Page: &core.BasePage{
-					Start: uint32(offset),
-					Limit: page,
-				},
-			})
+		billListReq.Page = &core.BasePage{
+			Start: uint32(offset),
+			Limit: page,
+		}
+		tmpResult, err := b.client.DataService().Aws.Bill.ListBillItem(kt, billListReq)
 		if err != nil {
 			return nil, err
 		}

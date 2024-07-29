@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"time"
 
-	"hcm/cmd/account-server/logics/bill/export"
 	accountset "hcm/pkg/api/core/account-set"
 	"hcm/pkg/api/data-service/cos"
 	"hcm/pkg/criteria/constant"
@@ -34,7 +33,6 @@ import (
 
 	"hcm/pkg/api/account-server/bill"
 	"hcm/pkg/api/core"
-	billapi "hcm/pkg/api/core/bill"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
@@ -42,7 +40,6 @@ import (
 	"hcm/pkg/kit"
 	"hcm/pkg/logs"
 	"hcm/pkg/rest"
-	"hcm/pkg/runtime/filter"
 
 	"github.com/shopspring/decimal"
 )
@@ -102,13 +99,32 @@ func (b *billItemSvc) ExportBillItems(cts *rest.Contexts) (any, error) {
 		}
 	}
 
+	rate, err := getExchangeRate(cts.Kit, b, req.BillYear, req.BillMonth)
+
+	switch vendor {
+	case enumor.HuaWei:
+		return exportHuaweiBillItems(cts.Kit, b, req, rate)
+	case enumor.Azure:
+		return exportAzureBillItems(cts.Kit, b, req, rate)
+	case enumor.Gcp:
+		return exportGcpBillItems(cts.Kit, b, req, rate)
+	case enumor.Aws:
+		return exportAwsBillItems(cts.Kit, b, req, rate)
+	case enumor.Zenlayer:
+		return exportZenlayerBillItems(cts.Kit, b, req, rate)
+	default:
+		return nil, fmt.Errorf("unsupport %s vendor", vendor)
+	}
+}
+
+func getExchangeRate(kt *kit.Kit, b *billItemSvc, year, month int) (*decimal.Decimal, error) {
 	// 获取汇率
-	result, err := b.client.DataService().Global.Bill.ListExchangeRate(cts.Kit, &core.ListReq{
+	result, err := b.client.DataService().Global.Bill.ListExchangeRate(kt, &core.ListReq{
 		Filter: tools.ExpressionAnd(
 			tools.RuleEqual("from_currency", enumor.CurrencyUSD),
 			tools.RuleEqual("to_currency", enumor.CurrencyRMB),
-			tools.RuleEqual("year", req.BillYear),
-			tools.RuleEqual("month", req.BillMonth),
+			tools.RuleEqual("year", year),
+			tools.RuleEqual("month", month),
 		),
 		Page: &core.BasePage{
 			Start: 0,
@@ -117,98 +133,84 @@ func (b *billItemSvc) ExportBillItems(cts *rest.Contexts) (any, error) {
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get exchange rate from %s to %s in %d-%d failed, err %s",
-			enumor.CurrencyUSD, enumor.CurrencyRMB, req.BillYear, req.BillMonth, err.Error())
+			enumor.CurrencyUSD, enumor.CurrencyRMB, year, month, err.Error())
 	}
 	if len(result.Details) == 0 {
 		return nil, fmt.Errorf("get no exchange rate from %s to %s in %d-%d, rid %s",
-			enumor.CurrencyUSD, enumor.CurrencyRMB, req.BillYear, req.BillMonth, cts.Kit.Rid)
+			enumor.CurrencyUSD, enumor.CurrencyRMB, year, month, kt.Rid)
 	}
 	if result.Details[0].ExchangeRate == nil {
 		return nil, fmt.Errorf("get exchange rate is nil, from %s to %s in %d-%d, rid %s",
-			enumor.CurrencyUSD, enumor.CurrencyRMB, req.BillYear, req.BillMonth, cts.Kit.Rid)
+			enumor.CurrencyUSD, enumor.CurrencyRMB, year, month, kt.Rid)
 	}
-
-	switch vendor {
-	case enumor.HuaWei:
-		return exportHuaweiBillItems(cts.Kit, b, mergedFilter, req.ExportLimit, result.Details[0].ExchangeRate)
-	case enumor.Azure:
-		return exportAzureBillItems(cts.Kit, b, mergedFilter, req.ExportLimit, result.Details[0].ExchangeRate)
-	case enumor.Gcp:
-		return exportGcpBillItems(cts.Kit, b, mergedFilter, req.ExportLimit, result.Details[0].ExchangeRate)
-	case enumor.Aws:
-		return exportAwsBillItems(cts.Kit, b, mergedFilter, req.ExportLimit, result.Details[0].ExchangeRate)
-	case enumor.Zenlayer:
-		return exportZenlayerBillItems(cts.Kit, b, mergedFilter, req.ExportLimit, result.Details[0].ExchangeRate)
-	default:
-		return nil, fmt.Errorf("unsupport %s vendor", vendor)
-	}
+	return result.Details[0].ExchangeRate, nil
 }
 
-func exportZenlayerBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
-	requireCount uint64, rate *decimal.Decimal) (any, error) {
+func exportZenlayerBillItems(kt *kit.Kit, b *billItemSvc, filter *bill.ExportBillItemReq, rate *decimal.Decimal) (any, error) {
 
-	details, err := b.client.DataService().Zenlayer.Bill.ListBillItem(kt,
-		&core.ListReq{
-			Filter: filter,
-			Page:   core.NewCountPage(),
-		})
-
-	if err != nil {
-		return nil, err
-	}
-
-	limit := details.Count
-	if requireCount <= limit {
-		limit = requireCount
-	}
-
-	result := make([]*billapi.ZenlayerBillItem, 0, limit)
-	page := core.DefaultMaxPageLimit
-	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
-		if limit-offset < uint64(page) {
-			page = uint(limit - offset)
-		}
-		tmpResult, err := b.client.DataService().Zenlayer.Bill.ListBillItem(kt,
-			&core.ListReq{
-				Filter: filter,
-				Page: &core.BasePage{
-					Start: uint32(offset),
-					Limit: page,
-				},
-			})
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, tmpResult.Details...)
-	}
-
-	// var azureExcelHeader = []string{"区域", "地区编码", "核算年月",  "事业群",
-	//"业务部门", "规划产品", "运营产品", "账号邮箱", "子账号名称", "服务一级类别名称",
-	//"服务二级类别名称", "服务三级类别名称", "产品名称", "资源类别", "计量地区",
-	//"资源地区编码", "单位", "用量", "折后税前成本（外币）", "币种", "汇率",
-	//"RMB成本（元）"}
-	data := make([][]interface{}, 0, len(result)+1)
-	//data = append(data, azureExcelHeader)
-	// TODO parse data to excel format
-	//for _, item := range result {
-	//	tmp := []interface{}{
-	//		item.Region,
-	//		item.RegionCode,
-	//		item.,
-	//	}
+	panic("not implement yet")
+	//details, err := b.client.DataService().Zenlayer.Bill.ListBillItem(kt,
+	//	&core.ListReq{
+	//		Filter: filter,
+	//		Page:   core.NewCountPage(),
+	//	})
+	//
+	//if err != nil {
+	//	return nil, err
 	//}
-
-	buf, err := export.GenerateExcel(data)
-	if err != nil {
-		return nil, err
-	}
-
-	url, err := uploadFileAndReturnUrl(kt, b, buf)
-	if err != nil {
-		return nil, err
-	}
-
-	return url, nil
+	//
+	//limit := details.Count
+	//if requireCount <= limit {
+	//	limit = requireCount
+	//}
+	//
+	//result := make([]*billapi.ZenlayerBillItem, 0, limit)
+	//page := core.DefaultMaxPageLimit
+	//for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+	//	if limit-offset < uint64(page) {
+	//		page = uint(limit - offset)
+	//	}
+	//	tmpResult, err := b.client.DataService().Zenlayer.Bill.ListBillItem(kt,
+	//		&core.ListReq{
+	//			Filter: filter,
+	//			Page: &core.BasePage{
+	//				Start: uint32(offset),
+	//				Limit: page,
+	//			},
+	//		})
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	result = append(result, tmpResult.Details...)
+	//}
+	//
+	//// var azureExcelHeader = []string{"区域", "地区编码", "核算年月",  "事业群",
+	////"业务部门", "规划产品", "运营产品", "账号邮箱", "子账号名称", "服务一级类别名称",
+	////"服务二级类别名称", "服务三级类别名称", "产品名称", "资源类别", "计量地区",
+	////"资源地区编码", "单位", "用量", "折后税前成本（外币）", "币种", "汇率",
+	////"RMB成本（元）"}
+	//data := make([][]interface{}, 0, len(result)+1)
+	////data = append(data, azureExcelHeader)
+	//// TODO parse data to excel format
+	////for _, item := range result {
+	////	tmp := []interface{}{
+	////		item.Region,
+	////		item.RegionCode,
+	////		item.,
+	////	}
+	////}
+	//
+	//buf, err := export.GenerateExcel(data)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//url, err := uploadFileAndReturnUrl(kt, b, buf)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//return url, nil
 }
 
 var (
@@ -244,66 +246,67 @@ var (
 	}
 )
 
-func exportAzureBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
-	requireCount uint64, rate *decimal.Decimal) (any, error) {
+func exportAzureBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq, rate *decimal.Decimal) (any, error) {
 
-	details, err := b.client.DataService().Azure.Bill.ListBillItem(kt,
-		&core.ListReq{
-			Filter: filter,
-			Page:   core.NewCountPage(),
-		})
-
-	if err != nil {
-		return nil, err
-	}
-
-	limit := details.Count
-	if requireCount <= limit {
-		limit = requireCount
-	}
-
-	result := make([]*billapi.AzureBillItem, 0, limit)
-	page := core.DefaultMaxPageLimit
-	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
-		if limit-offset < uint64(page) {
-			page = uint(limit - offset)
-		}
-		tmpResult, err := b.client.DataService().Azure.Bill.ListBillItem(kt,
-			&core.ListReq{
-				Filter: filter,
-				Page: &core.BasePage{
-					Start: uint32(offset),
-					Limit: page,
-				},
-			})
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, tmpResult.Details...)
-	}
-
-	data := make([][]interface{}, 0, len(result)+1)
-	//data = append(data, azureExcelHeader)
-	// TODO parse data to excel format
-	//for _, item := range result {
-	//	tmp := []interface{}{
-	//		item.Region,
-	//		item.RegionCode,
-	//		item.,
-	//	}
+	panic("not implement yet")
+	//billListReq := &databill.BillItemListReq{
+	//	ItemCommonOpt: &databill.ItemCommonOpt{
+	//		Vendor: enumor.Azure,
+	//		Year:   req.BillYear,
+	//		Month:  req.BillMonth,
+	//	},
+	//	ListReq: &core.ListReq{Filter: req.Filter, Page: core.NewCountPage()},
 	//}
-
-	buf, err := export.GenerateExcel(data)
-	if err != nil {
-		return nil, err
-	}
-
-	url, err := uploadFileAndReturnUrl(kt, b, buf)
-	if err != nil {
-		return nil, err
-	}
-
-	return url, nil
+	//details, err := b.client.DataService().Azure.Bill.ListBillItem(kt, billListReq)
+	//
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//limit := details.Count
+	//if req.ExportLimit <= limit {
+	//	limit = req.ExportLimit
+	//}
+	//
+	//result := make([]*billapi.AzureBillItem, 0, limit)
+	//page := core.DefaultMaxPageLimit
+	//for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+	//	if limit-offset < uint64(page) {
+	//		page = uint(limit - offset)
+	//	}
+	//	billListReq.Page = &core.BasePage{
+	//		Start: uint32(offset),
+	//		Limit: page,
+	//	}
+	//	tmpResult, err := b.client.DataService().Azure.Bill.ListBillItem(kt, billListReq)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	result = append(result, tmpResult.Details...)
+	//}
+	//
+	//data := make([][]interface{}, 0, len(result)+1)
+	////data = append(data, azureExcelHeader)
+	//// TODO parse data to excel format
+	////for _, item := range result {
+	////	tmp := []interface{}{
+	////		item.Region,
+	////		item.RegionCode,
+	////		item.,
+	////	}
+	////}
+	//
+	//buf, err := export.GenerateExcel(data)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//url, err := uploadFileAndReturnUrl(kt, b, buf)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//return url, nil
 }
 
 func uploadFileAndReturnUrl(kt *kit.Kit, b *billItemSvc, buf *bytes.Buffer) (string, error) {

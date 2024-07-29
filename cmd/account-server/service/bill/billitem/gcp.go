@@ -6,19 +6,18 @@ import (
 	"hcm/pkg/api/core"
 	protocore "hcm/pkg/api/core/account-set"
 	billapi "hcm/pkg/api/core/bill"
+	databill "hcm/pkg/api/data-service/bill"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/kit"
-	"hcm/pkg/runtime/filter"
 	"hcm/pkg/tools/slice"
 
 	"github.com/shopspring/decimal"
 )
 
-func exportGcpBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
-	requireCount uint64, rate *decimal.Decimal) (any, error) {
+func exportGcpBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq, rate *decimal.Decimal) (any, error) {
 
-	result, err := fetchGcpBillItems(kt, b, filter, requireCount)
+	result, err := fetchGcpBillItems(kt, b, req)
 	if err != nil {
 		return nil, err
 	}
@@ -117,21 +116,25 @@ func convertGcpBillItem(items []*billapi.GcpBillItem, bizNameMap map[int64]strin
 	return result
 }
 
-func fetchGcpBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
-	requireCount uint64) ([]*billapi.GcpBillItem, error) {
-	details, err := b.client.DataService().Gcp.Bill.ListBillItem(kt,
-		&core.ListReq{
-			Filter: filter,
-			Page:   core.NewCountPage(),
-		})
+func fetchGcpBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq) ([]*billapi.GcpBillItem, error) {
+
+	billListReq := &databill.BillItemListReq{
+		ItemCommonOpt: &databill.ItemCommonOpt{
+			Vendor: enumor.Gcp,
+			Year:   req.BillYear,
+			Month:  req.BillMonth,
+		},
+		ListReq: &core.ListReq{Filter: req.Filter, Page: core.NewCountPage()},
+	}
+	details, err := b.client.DataService().Gcp.Bill.ListBillItem(kt, billListReq)
 
 	if err != nil {
 		return nil, err
 	}
 
 	limit := details.Count
-	if requireCount <= limit {
-		limit = requireCount
+	if req.ExportLimit <= limit {
+		limit = req.ExportLimit
 	}
 
 	result := make([]*billapi.GcpBillItem, 0, limit)
@@ -140,14 +143,11 @@ func fetchGcpBillItems(kt *kit.Kit, b *billItemSvc, filter *filter.Expression,
 		if limit-offset < uint64(page) {
 			page = uint(limit - offset)
 		}
-		tmpResult, err := b.client.DataService().Gcp.Bill.ListBillItem(kt,
-			&core.ListReq{
-				Filter: filter,
-				Page: &core.BasePage{
-					Start: uint32(offset),
-					Limit: page,
-				},
-			})
+		billListReq.Page = &core.BasePage{
+			Start: uint32(offset),
+			Limit: page,
+		}
+		tmpResult, err := b.client.DataService().Gcp.Bill.ListBillItem(kt, billListReq)
 		if err != nil {
 			return nil, err
 		}
