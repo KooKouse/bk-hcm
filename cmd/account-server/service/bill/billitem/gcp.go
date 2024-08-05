@@ -110,7 +110,7 @@ func convertGcpBillItem(items []*billapi.GcpBillItem, bizNameMap map[int64]strin
 			safeToString(extension.ProjectID),
 			safeToString(extension.ProjectName),
 			safeToString(extension.ServiceDescription), // 服务分类
-			"服务分类名称",
+			safeToString(extension.ServiceDescription),
 			safeToString(extension.SkuDescription),
 			string(item.Currency),
 			safeToString(extension.UsageUnit),

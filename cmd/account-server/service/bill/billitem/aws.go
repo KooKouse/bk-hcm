@@ -93,9 +93,9 @@ func convertAwsBillItems(items []*billapi.AwsBillItem, bizNameMap map[int64]stri
 			extension.LineItemProductCode,
 			extension.ProductProductFamily,
 			extension.ProductProductName,
-			"API操作",
-			"产品规格",
-			"实例类型 product_instance_type?",
+			extension.LineItemOperation, // line_item_operation
+			extension.ProductUsagetype,
+			extension.ProductInsightstype,
 			extension.LineItemResourceId,
 			extension.PricingTerm,
 			extension.LineItemLineItemType,
