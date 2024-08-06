@@ -57,10 +57,14 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 		mainAccountIDs = append(mainAccountIDs, detail.MainAccountID)
 	}
 
-	// fetch main account
 	mainAccountMap, err := b.listMainAccount(cts.Kit, mainAccountIDs)
-	// fetch biz
+	if err != nil {
+		return nil, err
+	}
 	bizMap, err := b.listBiz(cts.Kit, bizIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	data := make([][]string, 0, len(result)+1)
 	data = append(data, excelHeader)
@@ -207,9 +211,7 @@ func (b *billAdjustmentSvc) listBiz(kt *kit.Kit, ids []int64) (map[int64]string,
 
 func (b *billAdjustmentSvc) listMainAccount(kt *kit.Kit, ids []string) (map[string]*accountset.BaseMainAccount, error) {
 	ids = slice.Unique(ids)
-	expression, err := tools.And(
-		tools.RuleIn("id", ids),
-	)
+	expression, err := tools.And(tools.RuleIn("id", ids))
 	if err != nil {
 		return nil, err
 	}

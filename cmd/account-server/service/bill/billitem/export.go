@@ -85,39 +85,26 @@ func (b *billItemSvc) ExportBillItems(cts *rest.Contexts) (any, error) {
 		return nil, err
 	}
 
-	var mergedFilter = tools.ExpressionAnd(
-		tools.RuleEqual("vendor", vendor),
-		tools.RuleEqual("bill_year", req.BillYear),
-		tools.RuleEqual("bill_month", req.BillMonth),
-	)
-
-	if req.Filter != nil {
-		mergedFilter, err = tools.And(mergedFilter, req.Filter)
-		if err != nil {
-			logs.Errorf("fail merge filter for exporting bill items, err: %v, req: %+v, rid: %s", err, req, cts.Kit.Rid)
-			return nil, err
-		}
+	rate, err := b.getExchangeRate(cts.Kit, req.BillYear, req.BillMonth)
+	if err != nil {
+		logs.Errorf("fail get exchange rate for exporting bill items, err: %v, year: %d, month: %d, rid: %s",
+			err, req.BillYear, req.BillMonth, cts.Kit.Rid)
+		return nil, err
 	}
-
-	rate, err := getExchangeRate(cts.Kit, b, req.BillYear, req.BillMonth)
 
 	switch vendor {
 	case enumor.HuaWei:
-		return exportHuaweiBillItems(cts.Kit, b, req, rate)
-	case enumor.Azure:
-		return exportAzureBillItems(cts.Kit, b, req, rate)
+		return b.exportHuaweiBillItems(cts.Kit, req, rate)
 	case enumor.Gcp:
-		return exportGcpBillItems(cts.Kit, b, req, rate)
+		return b.exportGcpBillItems(cts.Kit, req, rate)
 	case enumor.Aws:
-		return exportAwsBillItems(cts.Kit, b, req, rate)
-	case enumor.Zenlayer:
-		return exportZenlayerBillItems(cts.Kit, b, req, rate)
+		return b.exportAwsBillItems(cts.Kit, req, rate)
 	default:
 		return nil, fmt.Errorf("unsupport %s vendor", vendor)
 	}
 }
 
-func getExchangeRate(kt *kit.Kit, b *billItemSvc, year, month int) (*decimal.Decimal, error) {
+func (b *billItemSvc) getExchangeRate(kt *kit.Kit, year, month int) (*decimal.Decimal, error) {
 	// 获取汇率
 	result, err := b.client.DataService().Global.Bill.ListExchangeRate(kt, &core.ListReq{
 		Filter: tools.ExpressionAnd(
@@ -146,226 +133,68 @@ func getExchangeRate(kt *kit.Kit, b *billItemSvc, year, month int) (*decimal.Dec
 	return result.Details[0].ExchangeRate, nil
 }
 
-func exportZenlayerBillItems(kt *kit.Kit, b *billItemSvc, filter *bill.ExportBillItemReq, rate *decimal.Decimal) (any, error) {
-
-	panic("not implement yet")
-	//details, err := b.client.DataService().Zenlayer.Bill.ListBillItem(kt,
-	//	&core.ListReq{
-	//		Filter: filter,
-	//		Page:   core.NewCountPage(),
-	//	})
-	//
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//limit := details.Count
-	//if requireCount <= limit {
-	//	limit = requireCount
-	//}
-	//
-	//result := make([]*billapi.ZenlayerBillItem, 0, limit)
-	//page := core.DefaultMaxPageLimit
-	//for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
-	//	if limit-offset < uint64(page) {
-	//		page = uint(limit - offset)
-	//	}
-	//	tmpResult, err := b.client.DataService().Zenlayer.Bill.ListBillItem(kt,
-	//		&core.ListReq{
-	//			Filter: filter,
-	//			Page: &core.BasePage{
-	//				Start: uint32(offset),
-	//				Limit: page,
-	//			},
-	//		})
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	result = append(result, tmpResult.Details...)
-	//}
-	//
-	//// var azureExcelHeader = []string{"区域", "地区编码", "核算年月",  "事业群",
-	////"业务部门", "规划产品", "运营产品", "账号邮箱", "子账号名称", "服务一级类别名称",
-	////"服务二级类别名称", "服务三级类别名称", "产品名称", "资源类别", "计量地区",
-	////"资源地区编码", "单位", "用量", "折后税前成本（外币）", "币种", "汇率",
-	////"RMB成本（元）"}
-	//data := make([][]interface{}, 0, len(result)+1)
-	////data = append(data, azureExcelHeader)
-	//// TODO parse data to excel format
-	////for _, item := range result {
-	////	tmp := []interface{}{
-	////		item.Region,
-	////		item.RegionCode,
-	////		item.,
-	////	}
-	////}
-	//
-	//buf, err := export.GenerateExcel(data)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//url, err := uploadFileAndReturnUrl(kt, b, buf)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//return url, nil
-}
-
-var (
-	//item.Extension.MeasureId, // 金额单位。 1：元
-	huaWeiMeasureIdMap = map[int32]string{
-		1: "元",
-	}
-
-	// item.Extension.ChargeMode, // 计费模式。 1：包年/包月3：按需10：预留实例
-	huaWeiChargeModeMap = map[string]string{
-		"1":  "包年/包月",
-		"3":  "按需",
-		"10": "预留实例",
-	}
-
-	//	item.Extension.BillType,
-	huaWeiBillTypeMap = map[int32]string{
-		1:   "消费-新购",
-		2:   "消费-续订",
-		3:   "消费-变更",
-		4:   "退款-退订",
-		5:   "消费-使用",
-		8:   "消费-自动续订",
-		9:   "调账-补偿",
-		14:  "消费-服务支持计划月末扣费",
-		15:  "消费-税金",
-		16:  "调账-扣费",
-		17:  "消费-保底差额",
-		20:  "退款-变更",
-		100: "退款-退订税金",
-		101: "调账-补偿税金",
-		102: "调账-扣费税金",
-	}
-)
-
-func exportAzureBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq, rate *decimal.Decimal) (any, error) {
-
-	panic("not implement yet")
-	//billListReq := &databill.BillItemListReq{
-	//	ItemCommonOpt: &databill.ItemCommonOpt{
-	//		Vendor: enumor.Azure,
-	//		Year:   req.BillYear,
-	//		Month:  req.BillMonth,
-	//	},
-	//	ListReq: &core.ListReq{Filter: req.Filter, Page: core.NewCountPage()},
-	//}
-	//details, err := b.client.DataService().Azure.Bill.ListBillItem(kt, billListReq)
-	//
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//limit := details.Count
-	//if req.ExportLimit <= limit {
-	//	limit = req.ExportLimit
-	//}
-	//
-	//result := make([]*billapi.AzureBillItem, 0, limit)
-	//page := core.DefaultMaxPageLimit
-	//for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
-	//	if limit-offset < uint64(page) {
-	//		page = uint(limit - offset)
-	//	}
-	//	billListReq.Page = &core.BasePage{
-	//		Start: uint32(offset),
-	//		Limit: page,
-	//	}
-	//	tmpResult, err := b.client.DataService().Azure.Bill.ListBillItem(kt, billListReq)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	result = append(result, tmpResult.Details...)
-	//}
-	//
-	//data := make([][]interface{}, 0, len(result)+1)
-	////data = append(data, azureExcelHeader)
-	//// TODO parse data to excel format
-	////for _, item := range result {
-	////	tmp := []interface{}{
-	////		item.Region,
-	////		item.RegionCode,
-	////		item.,
-	////	}
-	////}
-	//
-	//buf, err := export.GenerateExcel(data)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//url, err := uploadFileAndReturnUrl(kt, b, buf)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//return url, nil
-}
-
-func uploadFileAndReturnUrl(kt *kit.Kit, b *billItemSvc, buf *bytes.Buffer) (string, error) {
+func (b *billItemSvc) uploadFileAndReturnUrl(kt *kit.Kit, buf *bytes.Buffer) (string, error) {
 	filename := fmt.Sprintf("%s/bill_item_%s.csv", constant.BillExportFolderPrefix,
 		time.Now().Format("20060102150405"))
 	base64Str, err := encode.ReaderToBase64Str(buf)
 	if err != nil {
 		return "", err
 	}
-	if err = b.client.DataService().Global.Cos.Upload(kt,
-		&cos.UploadFileReq{
-			Filename:   filename,
-			FileBase64: base64Str,
-		}); err != nil {
+	uploadReq := &cos.UploadFileReq{
+		Filename:   filename,
+		FileBase64: base64Str,
+	}
+	if err = b.client.DataService().Global.Cos.Upload(kt, uploadReq); err != nil {
 		return "", err
 	}
 
-	result, err := b.client.DataService().Global.Cos.GenerateTemporalUrl(kt, "download",
-		&cos.GenerateTemporalUrlReq{
-			Filename:   filename,
-			TTLSeconds: 3600,
-		})
+	generateReq := &cos.GenerateTemporalUrlReq{
+		Filename:   filename,
+		TTLSeconds: 3600,
+	}
+	result, err := b.client.DataService().Global.Cos.GenerateTemporalUrl(kt, "download", generateReq)
 	if err != nil {
 		return "", err
 	}
-
 	return result.URL, nil
 }
 
-func listMainAccount(kt *kit.Kit, b *billItemSvc, ids []string) (map[string]*accountset.BaseMainAccount, error) {
-	if len(ids) == 0 {
+func (b *billItemSvc) listMainAccount(kt *kit.Kit, mainAccountIDs []string) (map[string]*accountset.BaseMainAccount, error) {
+	if len(mainAccountIDs) == 0 {
 		return nil, nil
 	}
-	ids = slice.Unique(ids)
-	expression, err := tools.And(
-		tools.RuleIn("id", ids),
-	)
-	if err != nil {
-		return nil, err
+
+	result := make(map[string]*accountset.BaseMainAccount, len(mainAccountIDs))
+	for _, ids := range slice.Split(mainAccountIDs, int(core.DefaultMaxPageLimit)) {
+		listReq := &core.ListReq{
+			Filter: tools.ExpressionAnd(tools.RuleIn("id", ids)),
+			Page:   core.NewDefaultBasePage(),
+		}
+		resp, err := b.client.DataService().Global.MainAccount.List(kt, listReq)
+		if err != nil {
+			return nil, err
+		}
+		for _, detail := range resp.Details {
+			result[detail.ID] = detail
+		}
+	}
+	return result, nil
+}
+
+func (b *billItemSvc) listRootAccount(kt *kit.Kit,
+	rootAccountIDs []string) (map[string]*accountset.BaseRootAccount, error) {
+
+	if len(rootAccountIDs) == 0 {
+		return nil, nil
 	}
 
-	details, err := b.client.DataService().Global.MainAccount.List(kt, &core.ListReq{
-		Filter: expression,
-		Page:   core.NewCountPage(),
-	})
-	if err != nil {
-		return nil, err
-	}
-	total := details.Count
-
-	result := make(map[string]*accountset.BaseMainAccount, total)
-	for offset := uint64(0); offset < total; offset = offset + uint64(core.DefaultMaxPageLimit) {
-		tmpResult, err := b.client.DataService().Global.MainAccount.List(kt, &core.ListReq{
-			Filter: expression,
-			Page: &core.BasePage{
-				Start: uint32(offset),
-				Limit: core.DefaultMaxPageLimit,
-			},
-		})
+	result := make(map[string]*accountset.BaseRootAccount, len(rootAccountIDs))
+	for _, ids := range slice.Split(rootAccountIDs, int(core.DefaultMaxPageLimit)) {
+		listReq := &core.ListWithoutFieldReq{
+			Filter: tools.ExpressionAnd(tools.RuleIn("id", ids)),
+			Page:   core.NewDefaultBasePage(),
+		}
+		tmpResult, err := b.client.DataService().Global.RootAccount.List(kt, listReq)
 		if err != nil {
 			return nil, err
 		}
@@ -373,53 +202,13 @@ func listMainAccount(kt *kit.Kit, b *billItemSvc, ids []string) (map[string]*acc
 			result[item.ID] = item
 		}
 	}
-
 	return result, nil
 }
 
-func listRootAccount(kt *kit.Kit, b *billItemSvc, ids []string) (map[string]*accountset.BaseRootAccount, error) {
+func (b *billItemSvc) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	ids = slice.Unique(ids)
-	expression, err := tools.And(
-		tools.RuleIn("id", ids),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	details, err := b.client.DataService().Global.RootAccount.List(kt, &core.ListWithoutFieldReq{
-		Filter: expression,
-		Page:   core.NewCountPage(),
-	})
-	if err != nil {
-		return nil, err
-	}
-	total := details.Count
-
-	result := make(map[string]*accountset.BaseRootAccount, total)
-	for offset := uint64(0); offset < total; offset = offset + uint64(core.DefaultMaxPageLimit) {
-		tmpResult, err := b.client.DataService().Global.RootAccount.List(kt,
-			&core.ListWithoutFieldReq{
-				Filter: expression,
-				Page: &core.BasePage{
-					Start: uint32(offset),
-					Limit: core.DefaultMaxPageLimit,
-				},
-			})
-		if err != nil {
-			return nil, err
-		}
-		for _, item := range tmpResult.Details {
-			result[item.ID] = item
-		}
-	}
-
-	return result, nil
-}
-
-func listBiz(kt *kit.Kit, b *billItemSvc, ids []int64) (map[int64]string, error) {
 	expression := &cmdb.QueryFilter{
 		Rule: &cmdb.CombinedRule{
 			Condition: "AND",
@@ -427,7 +216,7 @@ func listBiz(kt *kit.Kit, b *billItemSvc, ids []int64) (map[int64]string, error)
 				&cmdb.AtomRule{
 					Field:    "bk_biz_id",
 					Operator: "in",
-					Value:    slice.Unique(ids),
+					Value:    ids,
 				},
 			},
 		},
@@ -450,68 +239,25 @@ func listBiz(kt *kit.Kit, b *billItemSvc, ids []int64) (map[int64]string, error)
 	return data, nil
 }
 
-func safeToInt(value interface{}) int {
-	if value == nil {
-		return 0
-	}
-	switch v := value.(type) {
-	case int:
-		return v
-	case int8:
-		return int(v)
-	case int16:
-		return int(v)
-	case int32:
-		return int(v)
-	case int64:
-		return int(v)
-	case *int:
-		if v != nil {
-			return *v
-		}
-	case *int8:
-		if v != nil {
-			return int(*v)
-		}
-	case *int16:
-		if v != nil {
-			return int(*v)
-		}
-	case *int32:
-		if v != nil {
-			return int(*v)
-		}
-	case *int64:
-		if v != nil {
-			return int(*v)
-		}
-	default:
-		logs.Warnf("unknown type %T, value %v", v, value)
-		return 0
-	}
-	return 0
-}
+// prepareRelateData 准备关联数据
+func (b *billItemSvc) prepareRelatedData(kt *kit.Kit, rootAccountIDs, mainAccountIDs []string, bkBizIDs []int64) (
+	rootAccountMap map[string]*accountset.BaseRootAccount, mainAccountMap map[string]*accountset.BaseMainAccount,
+	bizNameMap map[int64]string, err error) {
 
-func safeToString(value interface{}) string {
-	if value == nil {
-		return ""
+	bizNameMap, err = b.listBiz(kt, bkBizIDs)
+	if err != nil {
+		logs.Errorf("fail to list biz, err: %v, rid: %s", err, kt.Rid)
+		return nil, nil, nil, err
 	}
-	switch v := value.(type) {
-	case string:
-		return v
-	case *string:
-		if v == nil {
-			return ""
-		}
-		return *v
-	case *decimal.Decimal:
-		if v == nil {
-			return ""
-		}
-		return v.String()
-	default:
-		// 对于其他类型，尝试转换为字符串
-		logs.Warnf("unknown type %T, value %v", v, value)
-		return fmt.Sprintf("%v", value)
+	mainAccountMap, err = b.listMainAccount(kt, mainAccountIDs)
+	if err != nil {
+		logs.Errorf("fail to list main account, err: %v, rid: %s", err, kt.Rid)
+		return nil, nil, nil, err
 	}
+	rootAccountMap, err = b.listRootAccount(kt, rootAccountIDs)
+	if err != nil {
+		logs.Errorf("fail to list root account, err: %v, rid: %s", err, kt.Rid)
+		return nil, nil, nil, err
+	}
+	return rootAccountMap, mainAccountMap, bizNameMap, nil
 }

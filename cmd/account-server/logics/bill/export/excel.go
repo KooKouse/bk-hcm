@@ -3,6 +3,8 @@ package export
 import (
 	"bytes"
 
+	"hcm/pkg/logs"
+
 	"github.com/xuri/excelize/v2"
 )
 
@@ -29,6 +31,7 @@ func GenerateExcel(data [][]interface{}) (*bytes.Buffer, error) {
 				return nil, err
 			}
 			if err = f.SetCellValue(defaultSheetName, cell, value); err != nil {
+				logs.Errorf("write value (%v) to cell[%d,%d] error: %v", value, col+1, row+1, err.Error())
 				return nil, err
 			}
 		}
