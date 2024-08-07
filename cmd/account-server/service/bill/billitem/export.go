@@ -159,7 +159,7 @@ func (b *billItemSvc) uploadFileAndReturnUrl(kt *kit.Kit, buf *bytes.Buffer) (st
 	return result.URL, nil
 }
 
-func (b *billItemSvc) listMainAccount(kt *kit.Kit, mainAccountIDs []string) (map[string]*accountset.BaseMainAccount, error) {
+func (b *billItemSvc) listMainAccountByIDs(kt *kit.Kit, mainAccountIDs []string) (map[string]*accountset.BaseMainAccount, error) {
 	if len(mainAccountIDs) == 0 {
 		return nil, nil
 	}
@@ -249,7 +249,7 @@ func (b *billItemSvc) prepareRelatedData(kt *kit.Kit, rootAccountIDs, mainAccoun
 		logs.Errorf("fail to list biz, err: %v, rid: %s", err, kt.Rid)
 		return nil, nil, nil, err
 	}
-	mainAccountMap, err = b.listMainAccount(kt, mainAccountIDs)
+	mainAccountMap, err = b.listMainAccountByIDs(kt, mainAccountIDs)
 	if err != nil {
 		logs.Errorf("fail to list main account, err: %v, rid: %s", err, kt.Rid)
 		return nil, nil, nil, err
