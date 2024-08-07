@@ -70,6 +70,13 @@ controller:
   rootAccountSummarySyncDuration:
   dailySummarySyncDuration:
 
+billAllocation:
+  # aws saving plan allocation option
+  awsSavingPlans:
+#    - rootAccountId:
+#      spArnPrefix:
+#      SpPurchaseAccountCloudID:
+
 # defines esb related settings.
 esb:
   # endpoints is a seed list of host:port addresses of esb nodes.

@@ -107,6 +107,11 @@ func RuleEqual(fieldName string, value any) *filter.AtomRule {
 	return &filter.AtomRule{Field: fieldName, Op: filter.Equal.Factory(), Value: value}
 }
 
+// RuleNotEqual 生成资源字段等于查询的AtomRule，即fieldName!= value
+func RuleNotEqual(fieldName string, value any) *filter.AtomRule {
+	return &filter.AtomRule{Field: fieldName, Op: filter.NotEqual.Factory(), Value: value}
+}
+
 // RuleIn 生成资源字段等于查询的AtomRule，即fieldName in values
 func RuleIn[T any](fieldName string, values []T) *filter.AtomRule {
 	return &filter.AtomRule{Field: fieldName, Op: filter.In.Factory(), Value: values}
@@ -135,6 +140,11 @@ func RuleJSONNotEqual(fieldName string, value any) *filter.AtomRule {
 // RuleJsonIn 生成资源字段等于查询的AtomRule，即fieldName in values
 func RuleJsonIn[T any](fieldName string, values []T) *filter.AtomRule {
 	return &filter.AtomRule{Field: fieldName, Op: filter.JSONIn.Factory(), Value: values}
+}
+
+// RuleJSONContains 生成资源字段等于查询的AtomRule，即values in fieldName
+func RuleJSONContains[T any](fieldName string, values T) *filter.AtomRule {
+	return &filter.AtomRule{Field: fieldName, Op: filter.JSONContains.Factory(), Value: values}
 }
 
 // ExpressionAnd expression with op and

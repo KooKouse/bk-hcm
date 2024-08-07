@@ -118,10 +118,10 @@ type BillDailyPullTaskUpdateReq struct {
 	State              enumor.MainRawBillPullState `json:"state" validate:"omitempty"`
 	Count              int64                       `json:"count" validate:"omitempty"`
 	Currency           enumor.CurrencyCode         `json:"currency" validate:"omitempty"`
-	Cost               decimal.Decimal             `json:"cost" validate:"omitempty"`
+	Cost               *decimal.Decimal            `json:"cost" validate:"omitempty"`
 	FlowID             string                      `json:"flow_id" validate:"omitempty"`
 	SplitFlowID        string                      `json:"split_flow_id" validate:"omitempty"`
-	DailySummaryFlowID string                      `json:"daily_summary_flow_id" validate:"omitempty"`
+	DailySummaryFlowID *string                     `json:"daily_summary_flow_id" validate:"omitempty"`
 }
 
 // Validate validates BillDailyPullTaskUpdateReq

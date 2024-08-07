@@ -49,6 +49,7 @@ type Storage interface {
 	Upload(kt *kit.Kit, uploadPath string, r io.Reader) error
 	Download(kt *kit.Kit, downloadPath string, w io.Writer) error
 	ListItems(kt *kit.Kit, folderPath string) ([]string, error)
-	GetPreSignedURL(kt *kit.Kit, action string, ttl time.Duration, path string) (
+	Delete(kt *kit.Kit, path string) error
+	GetPreSignedURL(kt *kit.Kit, action OperateAction, ttl time.Duration, path string) (
 		tempCred *sts.Credentials, url string, err error)
 }

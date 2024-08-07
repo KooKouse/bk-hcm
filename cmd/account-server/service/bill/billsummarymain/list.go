@@ -30,6 +30,7 @@ import (
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
 	"hcm/pkg/kit"
+	"hcm/pkg/logs"
 	"hcm/pkg/rest"
 	"hcm/pkg/thirdparty/esb/cmdb"
 	"hcm/pkg/tools/slice"
@@ -91,16 +92,15 @@ func (s *service) ListMainAccountSummary(cts *rest.Contexts) (interface{}, error
 	}
 
 	for _, detail := range summary.Details {
-		var mainAccountCloudID, mainAccountCloudName string
-		if mainAccount, ok := accountMap[detail.MainAccountID]; ok {
-			mainAccountCloudID = mainAccount.CloudID
-			mainAccountCloudName = mainAccount.Name
+		account, ok := accountMap[detail.MainAccountID]
+		if !ok {
+			return nil, fmt.Errorf("[ListMainAccountSummary] summaryMain(%s): mainAccount(%s) not found",
+				detail.ID, detail.MainAccountID)
 		}
-
 		tmp := &asbillapi.MainAccountSummaryResult{
 			BillSummaryMainResult: *detail,
-			MainAccountCloudID:    mainAccountCloudID,
-			MainAccountCloudName:  mainAccountCloudName,
+			MainAccountCloudID:    account.CloudID,
+			MainAccountCloudName:  account.Name,
 		}
 		ret.Details = append(ret.Details, tmp)
 	}
@@ -117,6 +117,7 @@ func (s *service) listMainAccount(kt *kit.Kit, accountIDs []string) (map[string]
 	}
 	accountResult, err := s.client.DataService().Global.MainAccount.List(kt, listOpt)
 	if err != nil {
+		logs.Errorf("ListMainAccountSummary: list main account by ids(%v) failed: %s", accountIDs, err)
 		return nil, err
 	}
 
