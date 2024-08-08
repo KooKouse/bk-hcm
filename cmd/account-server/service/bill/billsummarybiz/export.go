@@ -14,6 +14,7 @@ import (
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
 	"hcm/pkg/kit"
+	"hcm/pkg/logs"
 	"hcm/pkg/rest"
 	"hcm/pkg/thirdparty/esb/cmdb"
 	"hcm/pkg/tools/encode"
@@ -45,6 +46,7 @@ func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 
 	result, err := s.fetchBizSummary(cts, req)
 	if err != nil {
+		logs.Errorf("fetch biz summary failed: %v, rid: %s")
 		return nil, err
 	}
 
@@ -54,6 +56,7 @@ func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 	}
 	bizMap, err := s.listBiz(cts.Kit, bkBizIDs)
 	if err != nil {
+		logs.Errorf("list biz failed: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -62,6 +65,7 @@ func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 	data = append(data, toRawData(result, bizMap)...)
 	buf, err := export.GenerateCSV(data)
 	if err != nil {
+		logs.Errorf("generate csv failed: %v, data: %v, rid: %s", err, data, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -84,10 +88,11 @@ func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 			TTLSeconds: 3600,
 		})
 	if err != nil {
+		logs.Errorf("generate url failed: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
-	return url.URL, nil
+	return bill.BillExportResult{DownloadURL: url.URL}, nil
 }
 
 func toRawData(details []*billproto.BillSummaryBizResult, bizMap map[int64]string) [][]string {
