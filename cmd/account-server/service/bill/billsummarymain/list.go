@@ -128,6 +128,26 @@ func (s *service) listMainAccount(kt *kit.Kit, accountIDs []string) (map[string]
 	return accountMap, nil
 }
 
+func (s *service) listRootAccount(kt *kit.Kit, accountIDs []string) (map[string]*accountset.BaseRootAccount, error) {
+	listOpt := &core.ListWithoutFieldReq{
+		Filter: tools.ExpressionAnd(
+			tools.RuleIn("id", slice.Unique(accountIDs)),
+		),
+		Page: core.NewDefaultBasePage(),
+	}
+	accountResult, err := s.client.DataService().Global.RootAccount.List(kt, listOpt)
+	if err != nil {
+		logs.Errorf("ListMainAccountSummary: list main account by ids(%v) failed: %s", accountIDs, err)
+		return nil, err
+	}
+
+	accountMap := make(map[string]*accountset.BaseRootAccount, len(accountResult.Details))
+	for _, detail := range accountResult.Details {
+		accountMap[detail.ID] = detail
+	}
+	return accountMap, nil
+}
+
 func (s *service) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error) {
 	expression := &cmdb.QueryFilter{
 		Rule: &cmdb.CombinedRule{

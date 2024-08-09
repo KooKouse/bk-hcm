@@ -33,6 +33,7 @@ import (
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
+	"hcm/pkg/logs"
 	"hcm/pkg/rest"
 	"hcm/pkg/tools/encode"
 
@@ -62,6 +63,7 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 
 	result, err := s.fetchRootAccountSummary(cts, req)
 	if err != nil {
+		logs.Errorf("fetch root account summary failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 	data := make([][]string, 0, len(result)+1)
@@ -69,6 +71,7 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 	data = append(data, toRawData(result)...)
 	buf, err := export.GenerateCSV(data)
 	if err != nil {
+		logs.Errorf("generate csv failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -78,19 +81,21 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 	if err != nil {
 		return nil, err
 	}
-	if err = s.client.DataService().Global.Cos.Upload(cts.Kit,
-		&cos.UploadFileReq{
-			Filename:   filename,
-			FileBase64: base64Str,
-		}); err != nil {
+	uploadFileReq := &cos.UploadFileReq{
+		Filename:   filename,
+		FileBase64: base64Str,
+	}
+	if err = s.client.DataService().Global.Cos.Upload(cts.Kit, uploadFileReq); err != nil {
+		logs.Errorf("update file failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
-	url, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download",
-		&cos.GenerateTemporalUrlReq{
-			Filename:   filename,
-			TTLSeconds: 3600,
-		})
+	generateURLReq := &cos.GenerateTemporalUrlReq{
+		Filename:   filename,
+		TTLSeconds: 3600,
+	}
+	url, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download", generateURLReq)
 	if err != nil {
+		logs.Errorf("generate url failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -112,12 +117,13 @@ func (s *service) fetchRootAccountSummary(cts *rest.Contexts, req *asbillapi.Roo
 		}
 	}
 
-	details, err := s.client.DataService().Global.Bill.ListBillSummaryRoot(cts.Kit,
-		&dsbillapi.BillSummaryRootListReq{
-			Filter: expression,
-			Page:   core.NewCountPage(),
-		})
+	countReq := &dsbillapi.BillSummaryRootListReq{
+		Filter: expression,
+		Page:   core.NewCountPage(),
+	}
+	details, err := s.client.DataService().Global.Bill.ListBillSummaryRoot(cts.Kit, countReq)
 	if err != nil {
+		logs.Errorf("list bill summary root failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -132,15 +138,16 @@ func (s *service) fetchRootAccountSummary(cts *rest.Contexts, req *asbillapi.Roo
 		if limit-offset < uint64(page) {
 			page = uint(limit - offset)
 		}
-		tmpResult, err := s.client.DataService().Global.Bill.ListBillSummaryRoot(cts.Kit,
-			&dsbillapi.BillSummaryRootListReq{
-				Filter: expression,
-				Page: &core.BasePage{
-					Start: uint32(offset),
-					Limit: core.DefaultMaxPageLimit,
-				},
-			})
+		listReq := &dsbillapi.BillSummaryRootListReq{
+			Filter: expression,
+			Page: &core.BasePage{
+				Start: uint32(offset),
+				Limit: core.DefaultMaxPageLimit,
+			},
+		}
+		tmpResult, err := s.client.DataService().Global.Bill.ListBillSummaryRoot(cts.Kit, listReq)
 		if err != nil {
+			logs.Errorf("list bill summary root failed, err: %v, rid: %s", err, cts.Kit.Rid)
 			return nil, err
 		}
 		result = append(result, tmpResult.Details...)

@@ -17,8 +17,10 @@ import (
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
 	"hcm/pkg/kit"
+	"hcm/pkg/logs"
 	"hcm/pkg/rest"
 	"hcm/pkg/thirdparty/esb/cmdb"
+	"hcm/pkg/tools/converter"
 	"hcm/pkg/tools/encode"
 	"hcm/pkg/tools/slice"
 )
@@ -50,19 +52,23 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 		return nil, err
 	}
 
-	bizIDs := make([]int64, 0, len(result))
-	mainAccountIDs := make([]string, 0, len(result))
+	bizIDMap := make(map[int64]struct{})
+	mainAccountIDMap := make(map[string]struct{})
 	for _, detail := range result {
-		bizIDs = append(bizIDs, detail.BkBizID)
-		mainAccountIDs = append(mainAccountIDs, detail.MainAccountID)
+		bizIDMap[detail.BkBizID] = struct{}{}
+		mainAccountIDMap[detail.MainAccountID] = struct{}{}
 	}
+	bizIDs := converter.MapKeyToSlice(bizIDMap)
+	mainAccountIDs := converter.MapKeyToSlice(mainAccountIDMap)
 
 	mainAccountMap, err := b.listMainAccount(cts.Kit, mainAccountIDs)
 	if err != nil {
+		logs.Errorf("list main account failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 	bizMap, err := b.listBiz(cts.Kit, bizIDs)
 	if err != nil {
+		logs.Errorf("list biz failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -71,6 +77,7 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 	data = append(data, toRawData(result, mainAccountMap, bizMap)...)
 	buf, err := export.GenerateCSV(data)
 	if err != nil {
+		logs.Errorf("generate csv failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -80,19 +87,21 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 	if err != nil {
 		return nil, err
 	}
-	if err = b.client.DataService().Global.Cos.Upload(cts.Kit,
-		&cos.UploadFileReq{
-			Filename:   filename,
-			FileBase64: base64Str,
-		}); err != nil {
+	uploadFileReq := &cos.UploadFileReq{
+		Filename:   filename,
+		FileBase64: base64Str,
+	}
+	if err = b.client.DataService().Global.Cos.Upload(cts.Kit, uploadFileReq); err != nil {
+		logs.Errorf("update file failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
-	url, err := b.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download",
-		&cos.GenerateTemporalUrlReq{
-			Filename:   filename,
-			TTLSeconds: 3600,
-		})
+	generateURLReq := &cos.GenerateTemporalUrlReq{
+		Filename:   filename,
+		TTLSeconds: 3600,
+	}
+	url, err := b.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download", generateURLReq)
 	if err != nil {
+		logs.Errorf("generate url failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 

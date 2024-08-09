@@ -33,7 +33,9 @@ import (
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
+	"hcm/pkg/logs"
 	"hcm/pkg/rest"
+	"hcm/pkg/tools/converter"
 	"hcm/pkg/tools/encode"
 )
 
@@ -63,23 +65,40 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 		return nil, err
 	}
 
-	accountIDs := make([]string, 0, len(result))
-	bizIDs := make([]int64, 0, len(result))
+	mainAccountIDMap := make(map[string]struct{})
+	bizIDMap := make(map[int64]struct{})
+	rootAccountIDMap := make(map[string]struct{})
 	for _, detail := range result {
-		accountIDs = append(accountIDs, detail.MainAccountID)
-		bizIDs = append(bizIDs, detail.BkBizID)
+		mainAccountIDMap[detail.MainAccountID] = struct{}{}
+		bizIDMap[detail.BkBizID] = struct{}{}
+		rootAccountIDMap[detail.RootAccountID] = struct{}{}
 	}
+	mainAccountIDs := converter.MapKeyToSlice(mainAccountIDMap)
+	rootAccountIDs := converter.MapKeyToSlice(rootAccountIDMap)
+	bizIDs := converter.MapKeyToSlice(bizIDMap)
 
-	accountMap, err := s.listMainAccount(cts.Kit, accountIDs)
-
-	// fetch biz
+	mainAccountMap, err := s.listMainAccount(cts.Kit, mainAccountIDs)
+	if err != nil {
+		logs.Errorf("list main account error: %s, rid: %s", err, cts.Kit.Rid)
+		return nil, err
+	}
+	rootAccountMap, err := s.listRootAccount(cts.Kit, rootAccountIDs)
+	if err != nil {
+		logs.Errorf("list root account error: %s, rid: %s", err, cts.Kit.Rid)
+		return nil, err
+	}
 	bizMap, err := s.listBiz(cts.Kit, bizIDs)
+	if err != nil {
+		logs.Errorf("list biz error: %s, rid: %s", err, cts.Kit.Rid)
+		return nil, err
+	}
 
 	data := make([][]string, 0, len(result)+1)
 	data = append(data, excelHeader)
-	data = append(data, toRawData(result, accountMap, bizMap)...)
+	data = append(data, toRawData(result, mainAccountMap, rootAccountMap, bizMap)...)
 	buf, err := export.GenerateCSV(data)
 	if err != nil {
+		logs.Errorf("generate csv failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -89,19 +108,21 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 	if err != nil {
 		return nil, err
 	}
-	if err = s.client.DataService().Global.Cos.Upload(cts.Kit,
-		&cos.UploadFileReq{
-			Filename:   filename,
-			FileBase64: base64Str,
-		}); err != nil {
+	uploadFileReq := &cos.UploadFileReq{
+		Filename:   filename,
+		FileBase64: base64Str,
+	}
+	if err = s.client.DataService().Global.Cos.Upload(cts.Kit, uploadFileReq); err != nil {
+		logs.Errorf("update file failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
-	url, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download",
-		&cos.GenerateTemporalUrlReq{
-			Filename:   filename,
-			TTLSeconds: 3600,
-		})
+	generateURLReq := &cos.GenerateTemporalUrlReq{
+		Filename:   filename,
+		TTLSeconds: 3600,
+	}
+	url, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download", generateURLReq)
 	if err != nil {
+		logs.Errorf("generate url failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -157,21 +178,27 @@ func (s *service) fetchMainAccountSummary(cts *rest.Contexts, req *asbillapi.Mai
 	return result, nil
 }
 
-func toRawData(details []*dsbillapi.BillSummaryMainResult, accountMap map[string]*accountset.BaseMainAccount,
-	bizMap map[int64]string) [][]string {
+func toRawData(details []*dsbillapi.BillSummaryMainResult, mainAccountMap map[string]*accountset.BaseMainAccount,
+	rootAccountMap map[string]*accountset.BaseRootAccount, bizMap map[int64]string) [][]string {
 
 	data := make([][]string, 0, len(details))
 	for _, detail := range details {
 		var mainAccountID, mainAccountName string
-		if mainAccount, ok := accountMap[detail.MainAccountID]; ok {
+		var rootAccountID, rootAccountName string
+		if mainAccount, ok := mainAccountMap[detail.MainAccountID]; ok {
 			mainAccountID = mainAccount.CloudID
+			mainAccountName = mainAccount.Name
+		}
+		if rootAccount, ok := rootAccountMap[detail.RootAccountID]; ok {
+			rootAccountID = rootAccount.CloudID
+			rootAccountName = rootAccount.Name
 		}
 		bizName := bizMap[detail.BkBizID]
 		tmp := []string{
 			mainAccountID,
 			mainAccountName,
-			detail.RootAccountID,
-			detail.MainAccountName,
+			rootAccountID,
+			rootAccountName,
 			bizName,
 			detail.CurrentMonthRMBCostSynced.String(),
 			detail.CurrentMonthCostSynced.String(),

@@ -75,20 +75,21 @@ func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = s.client.DataService().Global.Cos.Upload(cts.Kit,
-		&cos.UploadFileReq{
-			Filename:   filename,
-			FileBase64: base64Str,
-		}); err != nil {
+	uploadFileReq := &cos.UploadFileReq{
+		Filename:   filename,
+		FileBase64: base64Str,
+	}
+	if err = s.client.DataService().Global.Cos.Upload(cts.Kit, uploadFileReq); err != nil {
+		logs.Errorf("update file failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
-	url, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download",
-		&cos.GenerateTemporalUrlReq{
-			Filename:   filename,
-			TTLSeconds: 3600,
-		})
+	generateURLReq := &cos.GenerateTemporalUrlReq{
+		Filename:   filename,
+		TTLSeconds: 3600,
+	}
+	url, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download", generateURLReq)
 	if err != nil {
-		logs.Errorf("generate url failed: %v, rid: %s", err, cts.Kit.Rid)
+		logs.Errorf("generate url failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
