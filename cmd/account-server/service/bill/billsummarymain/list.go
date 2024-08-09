@@ -30,7 +30,6 @@ import (
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
 	"hcm/pkg/kit"
-	"hcm/pkg/logs"
 	"hcm/pkg/rest"
 	"hcm/pkg/thirdparty/esb/cmdb"
 	"hcm/pkg/tools/slice"
@@ -108,44 +107,47 @@ func (s *service) ListMainAccountSummary(cts *rest.Contexts) (interface{}, error
 	return ret, nil
 }
 
-func (s *service) listMainAccount(kt *kit.Kit, accountIDs []string) (map[string]*accountset.BaseMainAccount, error) {
-	listOpt := &core.ListReq{
-		Filter: tools.ExpressionAnd(
-			tools.RuleIn("id", slice.Unique(accountIDs)),
-		),
-		Page: core.NewDefaultBasePage(),
-	}
-	accountResult, err := s.client.DataService().Global.MainAccount.List(kt, listOpt)
-	if err != nil {
-		logs.Errorf("ListMainAccountSummary: list main account by ids(%v) failed: %s", accountIDs, err)
-		return nil, err
+func (s *service) listMainAccount(kt *kit.Kit, mainAccountIDs []string) (map[string]*accountset.BaseMainAccount, error) {
+	if len(mainAccountIDs) == 0 {
+		return nil, nil
 	}
 
-	accountMap := make(map[string]*accountset.BaseMainAccount, len(accountResult.Details))
-	for _, detail := range accountResult.Details {
-		accountMap[detail.ID] = detail
+	result := make(map[string]*accountset.BaseMainAccount, len(mainAccountIDs))
+	for _, ids := range slice.Split(mainAccountIDs, int(core.DefaultMaxPageLimit)) {
+		listReq := &core.ListReq{
+			Filter: tools.ExpressionAnd(tools.RuleIn("id", ids)),
+			Page:   core.NewDefaultBasePage(),
+		}
+		resp, err := s.client.DataService().Global.MainAccount.List(kt, listReq)
+		if err != nil {
+			return nil, err
+		}
+		for _, detail := range resp.Details {
+			result[detail.ID] = detail
+		}
 	}
-	return accountMap, nil
+	return result, nil
 }
 
 func (s *service) listRootAccount(kt *kit.Kit, accountIDs []string) (map[string]*accountset.BaseRootAccount, error) {
-	listOpt := &core.ListWithoutFieldReq{
-		Filter: tools.ExpressionAnd(
-			tools.RuleIn("id", slice.Unique(accountIDs)),
-		),
-		Page: core.NewDefaultBasePage(),
+	if len(accountIDs) == 0 {
+		return nil, nil
 	}
-	accountResult, err := s.client.DataService().Global.RootAccount.List(kt, listOpt)
-	if err != nil {
-		logs.Errorf("ListMainAccountSummary: list main account by ids(%v) failed: %s", accountIDs, err)
-		return nil, err
+	result := make(map[string]*accountset.BaseRootAccount, len(accountIDs))
+	for _, ids := range slice.Split(accountIDs, int(core.DefaultMaxPageLimit)) {
+		listReq := &core.ListWithoutFieldReq{
+			Filter: tools.ExpressionAnd(tools.RuleIn("id", ids)),
+			Page:   core.NewDefaultBasePage(),
+		}
+		tmpResult, err := s.client.DataService().Global.RootAccount.List(kt, listReq)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range tmpResult.Details {
+			result[item.ID] = item
+		}
 	}
-
-	accountMap := make(map[string]*accountset.BaseRootAccount, len(accountResult.Details))
-	for _, detail := range accountResult.Details {
-		accountMap[detail.ID] = detail
-	}
-	return accountMap, nil
+	return result, nil
 }
 
 func (s *service) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error) {

@@ -46,7 +46,12 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 
 	data := make([][]string, 0, len(result)+1)
 	data = append(data, append(commonExcelHeader, awsExcelHeader...))
-	data = append(data, convertAwsBillItems(result, bizNameMap, mainAccountMap, rootAccountMap, rate)...)
+	table, err := convertAwsBillItems(result, bizNameMap, mainAccountMap, rootAccountMap, rate)
+	if err != nil {
+		logs.Errorf("convert to raw data error: %s, rid: %s", err, kt.Rid)
+		return nil, err
+	}
+	data = append(data, table...)
 
 	buf, err := export.GenerateCSV(data)
 	if err != nil {
@@ -64,17 +69,17 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 
 func convertAwsBillItems(items []*billapi.AwsBillItem, bizNameMap map[int64]string,
 	mainAccountMap map[string]*protocore.BaseMainAccount, rootAccountMap map[string]*protocore.BaseRootAccount,
-	rate *decimal.Decimal) [][]string {
+	rate *decimal.Decimal) ([][]string, error) {
 
 	result := make([][]string, 0, len(items))
 	for _, item := range items {
-		var mainAccountID, rootAccountID, mainAccountSite string
-		if mainAccount, ok := mainAccountMap[item.MainAccountID]; ok {
-			mainAccountID = mainAccount.CloudID
-			mainAccountSite = enumor.MainAccountSiteTypeNameMap[mainAccount.Site]
+		mainAccount, ok := mainAccountMap[item.MainAccountID]
+		if !ok {
+			return nil, fmt.Errorf("main account(%s) not found", item.MainAccountID)
 		}
-		if rootAccount, ok := rootAccountMap[item.RootAccountID]; ok {
-			rootAccountID = rootAccount.CloudID
+		rootAccount, ok := rootAccountMap[item.RootAccountID]
+		if !ok {
+			return nil, fmt.Errorf("root account(%s) not found", item.RootAccountID)
 		}
 
 		extension := item.Extension.AwsRawBillItem
@@ -83,11 +88,11 @@ func convertAwsBillItems(items []*billapi.AwsBillItem, bizNameMap map[int64]stri
 		}
 
 		tmp := []string{
-			mainAccountSite,
+			string(mainAccount.Site),
 			fmt.Sprintf("%d-%02d", item.BillYear, item.BillMonth),
 			bizNameMap[item.BkBizID],
-			rootAccountID,
-			mainAccountID,
+			rootAccount.ID,
+			mainAccount.ID,
 			extension.ProductToRegionCode,
 			extension.ProductFromLocation,
 			extension.BillInvoiceId,
@@ -111,7 +116,7 @@ func convertAwsBillItems(items []*billapi.AwsBillItem, bizNameMap map[int64]stri
 		}
 		result = append(result, tmp)
 	}
-	return result
+	return result, nil
 }
 
 func fetchAwsBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq) ([]*billapi.AwsBillItem, error) {

@@ -95,7 +95,12 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 
 	data := make([][]string, 0, len(result)+1)
 	data = append(data, excelHeader)
-	data = append(data, toRawData(result, mainAccountMap, rootAccountMap, bizMap)...)
+	table, err := toRawData(result, mainAccountMap, rootAccountMap, bizMap)
+	if err != nil {
+		logs.Errorf("convert to raw data error: %s, rid: %s", err, cts.Kit.Rid)
+		return nil, err
+	}
+	data = append(data, table...)
 	buf, err := export.GenerateCSV(data)
 	if err != nil {
 		logs.Errorf("generate csv failed, err: %v, rid: %s", err, cts.Kit.Rid)
@@ -179,26 +184,25 @@ func (s *service) fetchMainAccountSummary(cts *rest.Contexts, req *asbillapi.Mai
 }
 
 func toRawData(details []*dsbillapi.BillSummaryMainResult, mainAccountMap map[string]*accountset.BaseMainAccount,
-	rootAccountMap map[string]*accountset.BaseRootAccount, bizMap map[int64]string) [][]string {
+	rootAccountMap map[string]*accountset.BaseRootAccount, bizMap map[int64]string) ([][]string, error) {
 
 	data := make([][]string, 0, len(details))
 	for _, detail := range details {
-		var mainAccountID, mainAccountName string
-		var rootAccountID, rootAccountName string
-		if mainAccount, ok := mainAccountMap[detail.MainAccountID]; ok {
-			mainAccountID = mainAccount.CloudID
-			mainAccountName = mainAccount.Name
+
+		mainAccount, ok := mainAccountMap[detail.MainAccountID]
+		if !ok {
+			return nil, fmt.Errorf("main account(%s) not found", detail.MainAccountID)
 		}
-		if rootAccount, ok := rootAccountMap[detail.RootAccountID]; ok {
-			rootAccountID = rootAccount.CloudID
-			rootAccountName = rootAccount.Name
+		rootAccount, ok := rootAccountMap[detail.RootAccountID]
+		if !ok {
+			return nil, fmt.Errorf("root account(%s) not found", detail.RootAccountID)
 		}
 		bizName := bizMap[detail.BkBizID]
 		tmp := []string{
-			mainAccountID,
-			mainAccountName,
-			rootAccountID,
-			rootAccountName,
+			mainAccount.CloudID,
+			mainAccount.Name,
+			rootAccount.CloudID,
+			rootAccount.Name,
 			bizName,
 			detail.CurrentMonthRMBCostSynced.String(),
 			detail.CurrentMonthCostSynced.String(),
@@ -208,5 +212,5 @@ func toRawData(details []*dsbillapi.BillSummaryMainResult, mainAccountMap map[st
 
 		data = append(data, tmp)
 	}
-	return data
+	return data, nil
 }

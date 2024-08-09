@@ -82,7 +82,12 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 
 	data := make([][]string, 0, len(result)+1)
 	data = append(data, append(commonExcelHeader, huaWeiExcelHeader...))
-	data = append(data, convertHuaweiBillItems(result, bizNameMap, mainAccountMap, rootAccountMap, rate)...)
+	table, err := convertHuaweiBillItems(result, bizNameMap, mainAccountMap, rootAccountMap, rate)
+	if err != nil {
+		logs.Errorf("convert to raw data error: %s, rid: %s", err, kt.Rid)
+		return nil, err
+	}
+	data = append(data, table...)
 
 	buf, err := export.GenerateCSV(data)
 	if err != nil {
@@ -99,17 +104,17 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 
 func convertHuaweiBillItems(items []*billapi.HuaweiBillItem, bizNameMap map[int64]string,
 	mainAccountMap map[string]*protocore.BaseMainAccount, rootAccountMap map[string]*protocore.BaseRootAccount,
-	rate *decimal.Decimal) [][]string {
+	rate *decimal.Decimal) ([][]string, error) {
 
 	result := make([][]string, 0, len(items))
 	for _, item := range items {
-		var mainAccountID, mainAccountSite, rootAccountID string
-		if mainAccount, ok := mainAccountMap[item.MainAccountID]; ok {
-			mainAccountID = mainAccount.CloudID
-			mainAccountSite = enumor.MainAccountSiteTypeNameMap[mainAccount.Site]
+		mainAccount, ok := mainAccountMap[item.MainAccountID]
+		if !ok {
+			return nil, fmt.Errorf("main account(%s) not found", item.MainAccountID)
 		}
-		if rootAccount, ok := rootAccountMap[item.RootAccountID]; ok {
-			rootAccountID = rootAccount.CloudID
+		rootAccount, ok := rootAccountMap[item.RootAccountID]
+		if !ok {
+			return nil, fmt.Errorf("root account(%s) not found", item.RootAccountID)
 		}
 
 		extension := item.Extension.ResFeeRecordV2
@@ -118,11 +123,11 @@ func convertHuaweiBillItems(items []*billapi.HuaweiBillItem, bizNameMap map[int6
 		}
 
 		var tmp = []string{
-			mainAccountSite,
+			string(mainAccount.Site),
 			fmt.Sprintf("%d%02d", item.BillYear, item.BillMonth),
 			bizNameMap[item.BkBizID],
-			rootAccountID,
-			mainAccountID,
+			rootAccount.ID,
+			mainAccount.ID,
 			converter.PtrToVal[string](extension.RegionName),
 			converter.PtrToVal[string](extension.ProductName),
 			converter.PtrToVal[string](extension.Region),
@@ -145,7 +150,7 @@ func convertHuaweiBillItems(items []*billapi.HuaweiBillItem, bizNameMap map[int6
 		}
 		result = append(result, tmp)
 	}
-	return result
+	return result, nil
 }
 
 func fetchHuaweiBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq) (

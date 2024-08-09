@@ -26,6 +26,7 @@ import (
 	"hcm/cmd/account-server/logics/bill/export"
 	asbillapi "hcm/pkg/api/account-server/bill"
 	"hcm/pkg/api/core"
+	accountset "hcm/pkg/api/core/account-set"
 	dsbillapi "hcm/pkg/api/data-service/bill"
 	"hcm/pkg/api/data-service/cos"
 	"hcm/pkg/criteria/constant"
@@ -33,9 +34,12 @@ import (
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
+	"hcm/pkg/kit"
 	"hcm/pkg/logs"
 	"hcm/pkg/rest"
+	"hcm/pkg/tools/converter"
 	"hcm/pkg/tools/encode"
+	"hcm/pkg/tools/slice"
 
 	"github.com/TencentBlueKing/gopkg/conv"
 )
@@ -66,9 +70,26 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 		logs.Errorf("fetch root account summary failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
+
+	rootAccountIDMap := make(map[string]struct{})
+	for _, detail := range result {
+		rootAccountIDMap[detail.RootAccountID] = struct{}{}
+	}
+	rootAccountIDs := converter.MapKeyToSlice(rootAccountIDMap)
+	rootAccountMap, err := s.listRootAccount(cts.Kit, rootAccountIDs)
+	if err != nil {
+		logs.Errorf("list root account error: %s, rid: %s", err, cts.Kit.Rid)
+		return nil, err
+	}
+
 	data := make([][]string, 0, len(result)+1)
 	data = append(data, excelHeader)
-	data = append(data, toRawData(result)...)
+	table, err := toRawData(result, rootAccountMap)
+	if err != nil {
+		logs.Errorf("convert to raw data failed, err: %v, rid: %s", err, cts.Kit.Rid)
+		return nil, err
+	}
+	data = append(data, table...)
 	buf, err := export.GenerateCSV(data)
 	if err != nil {
 		logs.Errorf("generate csv failed, err: %v, rid: %s", err, cts.Kit.Rid)
@@ -155,12 +176,17 @@ func (s *service) fetchRootAccountSummary(cts *rest.Contexts, req *asbillapi.Roo
 	return result, nil
 }
 
-func toRawData(details []*dsbillapi.BillSummaryRootResult) [][]string {
+func toRawData(details []*dsbillapi.BillSummaryRootResult, accountMap map[string]*accountset.BaseRootAccount) (
+	[][]string, error) {
 	data := make([][]string, 0, len(details))
 	for _, detail := range details {
+		rootAccount, ok := accountMap[detail.RootAccountID]
+		if !ok {
+			return nil, fmt.Errorf("root account not found, id: %s", detail.RootAccountID)
+		}
 		tmp := []string{
-			detail.RootAccountID,
-			detail.RootAccountName,
+			rootAccount.CloudID,
+			rootAccount.Name,
 			enumor.RootAccountBillSummaryStateMap[detail.State],
 			detail.CurrentMonthRMBCostSynced.String(),
 			detail.LastMonthRMBCostSynced.String(),
@@ -175,5 +201,26 @@ func toRawData(details []*dsbillapi.BillSummaryRootResult) [][]string {
 
 		data = append(data, tmp)
 	}
-	return data
+	return data, nil
+}
+
+func (s *service) listRootAccount(kt *kit.Kit, accountIDs []string) (map[string]*accountset.BaseRootAccount, error) {
+	if len(accountIDs) == 0 {
+		return nil, nil
+	}
+	result := make(map[string]*accountset.BaseRootAccount, len(accountIDs))
+	for _, ids := range slice.Split(accountIDs, int(core.DefaultMaxPageLimit)) {
+		listReq := &core.ListWithoutFieldReq{
+			Filter: tools.ExpressionAnd(tools.RuleIn("id", ids)),
+			Page:   core.NewDefaultBasePage(),
+		}
+		tmpResult, err := s.client.DataService().Global.RootAccount.List(kt, listReq)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range tmpResult.Details {
+			result[item.ID] = item
+		}
+	}
+	return result, nil
 }

@@ -74,7 +74,12 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 
 	data := make([][]string, 0, len(result)+1)
 	data = append(data, excelHeader)
-	data = append(data, toRawData(result, mainAccountMap, bizMap)...)
+	table, err := toRawData(result, mainAccountMap, bizMap)
+	if err != nil {
+		logs.Errorf("convert to raw data error: %s, rid: %s", err, cts.Kit.Rid)
+		return nil, err
+	}
+	data = append(data, table...)
 	buf, err := export.GenerateCSV(data)
 	if err != nil {
 		logs.Errorf("generate csv failed, err: %v, rid: %s", err, cts.Kit.Rid)
@@ -159,22 +164,22 @@ func (b *billAdjustmentSvc) fetchBillAdjustmentItem(cts *rest.Contexts, req *bil
 	return result, nil
 }
 
-func toRawData(details []*billcore.AdjustmentItem, accountMap map[string]*accountset.BaseMainAccount,
-	bizMap map[int64]string) [][]string {
+func toRawData(details []*billcore.AdjustmentItem, mainAccountMap map[string]*accountset.BaseMainAccount,
+	bizMap map[int64]string) ([][]string, error) {
 
 	data := make([][]string, 0, len(details))
 	for _, detail := range details {
 		bizName := bizMap[detail.BkBizID]
-		var mainAccountID string
-		if mainAccount, ok := accountMap[detail.MainAccountID]; ok {
-			mainAccountID = mainAccount.CloudID
+		mainAccount, ok := mainAccountMap[detail.MainAccountID]
+		if !ok {
+			return nil, fmt.Errorf("main account(%s) not found", detail.MainAccountID)
 		}
 
 		tmp := []string{
 			detail.UpdatedAt,
 			detail.ID,
 			bizName,
-			mainAccountID,
+			mainAccount.ID,
 			enumor.BillAdjustmentTypeNameMap[detail.Type],
 			detail.Operator,
 			detail.Cost.String(),
@@ -184,7 +189,7 @@ func toRawData(details []*billcore.AdjustmentItem, accountMap map[string]*accoun
 
 		data = append(data, tmp)
 	}
-	return data
+	return data, nil
 }
 
 func (b *billAdjustmentSvc) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error) {

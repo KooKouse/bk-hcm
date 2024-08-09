@@ -1,6 +1,8 @@
 package billitem
 
 import (
+	"fmt"
+
 	"hcm/cmd/account-server/logics/bill/export"
 	"hcm/pkg/api/account-server/bill"
 	"hcm/pkg/api/core"
@@ -56,7 +58,12 @@ func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 
 	data := make([][]string, 0, len(result)+1)
 	data = append(data, append(commonExcelHeader, gcpExcelHeader...))
-	data = append(data, convertGcpBillItem(result, bizNameMap, mainAccountMap, rootAccountMap, regionMap, rate)...)
+	table, err := convertGcpBillItem(result, bizNameMap, mainAccountMap, rootAccountMap, regionMap, rate)
+	if err != nil {
+		logs.Errorf("convert to raw data error: %s, rid: %s", err, kt.Rid)
+		return nil, err
+	}
+	data = append(data, table...)
 
 	buf, err := export.GenerateCSV(data)
 	if err != nil {
@@ -75,17 +82,17 @@ func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 
 func convertGcpBillItem(items []*billapi.GcpBillItem, bizNameMap map[int64]string,
 	mainAccountMap map[string]*protocore.BaseMainAccount, rootAccountMap map[string]*protocore.BaseRootAccount,
-	regionMap map[string]string, rate *decimal.Decimal) [][]string {
+	regionMap map[string]string, rate *decimal.Decimal) ([][]string, error) {
 
 	result := make([][]string, 0, len(items))
 	for _, item := range items {
-		var mainAccountID, mainAccountSite, rootAccountID string
-		if mainAccount, ok := mainAccountMap[item.MainAccountID]; ok {
-			mainAccountID = mainAccount.CloudID
-			mainAccountSite = enumor.MainAccountSiteTypeNameMap[mainAccount.Site]
+		mainAccount, ok := mainAccountMap[item.MainAccountID]
+		if !ok {
+			return nil, fmt.Errorf("main account(%s) not found", item.MainAccountID)
 		}
-		if rootAccount, ok := rootAccountMap[item.RootAccountID]; ok {
-			rootAccountID = rootAccount.CloudID
+		rootAccount, ok := rootAccountMap[item.RootAccountID]
+		if !ok {
+			return nil, fmt.Errorf("root account(%s) not found", item.RootAccountID)
 		}
 		extension := item.Extension.GcpRawBillItem
 		if extension == nil {
@@ -93,14 +100,14 @@ func convertGcpBillItem(items []*billapi.GcpBillItem, bizNameMap map[int64]strin
 		}
 
 		tmp := []string{
-			mainAccountSite,
+			string(mainAccount.Site),
 			converter.PtrToVal[string](extension.Month),
 			bizNameMap[item.BkBizID],
-			rootAccountID,
-			mainAccountID,
-			converter.PtrToVal[string](extension.Region),
+			rootAccount.ID,
+			mainAccount.ID,
+			converter.PtrToVal[string](item.Extension.GcpRawBillItem.Region),
 			regionMap[converter.PtrToVal[string](extension.Region)],
-			converter.PtrToVal[string](extension.ProjectID),
+			converter.PtrToVal[string](item.Extension.GcpRawBillItem.ProjectID),
 			converter.PtrToVal[string](extension.ProjectName),
 			converter.PtrToVal[string](extension.ServiceDescription), // 服务分类
 			converter.PtrToVal[string](extension.ServiceDescription), // 服务分类名称
@@ -115,7 +122,7 @@ func convertGcpBillItem(items []*billapi.GcpBillItem, bizNameMap map[int64]strin
 
 		result = append(result, tmp)
 	}
-	return result
+	return result, nil
 }
 
 func fetchGcpBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq) ([]*billapi.GcpBillItem, error) {
