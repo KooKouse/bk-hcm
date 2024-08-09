@@ -111,13 +111,13 @@ func (svc *service) ListBillSummaryBiz(cts *rest.Contexts) (interface{}, error) 
 
 	details := make([]*dataproto.BillSummaryBizResult, len(data.Details))
 	for indx, d := range data.Details {
-		details[indx] = toProductResult(&d)
+		details[indx] = toBizResult(&d)
 	}
 
 	return &dataproto.BillSummaryBizListResult{Details: details, Count: data.Count}, nil
 }
 
-func toProductResult(m *tablebill.AccountBillSummaryMain) *dataproto.BillSummaryBizResult {
+func toBizResult(m *tablebill.AccountBillSummaryMain) *dataproto.BillSummaryBizResult {
 	return &dataproto.BillSummaryBizResult{
 		BkBizID:                   m.BkBizID,
 		BkBizName:                 m.BkBizName,
