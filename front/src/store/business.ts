@@ -531,6 +531,16 @@ export const useBusinessStore = defineStore({
         },
       );
     },
+    /**
+     * 统计指定的目标组的权重情况
+     * @param target_group_ids 目标组id
+     */
+    reqStatTargetGroupRsWeight(target_group_ids: string[]) {
+      return http.post(
+        `${BK_HCM_AJAX_URL_PREFIX}/api/v1/cloud/${getBusinessApiPath()}target_groups/targets/weight_stat`,
+        { target_group_ids },
+      );
+    },
     // 主机所关联资源(硬盘, eip)的个数
     getRelResByCvmIds(data: { ids: string[] }) {
       return http.post(`${BK_HCM_AJAX_URL_PREFIX}/api/v1/cloud/${getBusinessApiPath()}cvms/rel_res/batch`, data);

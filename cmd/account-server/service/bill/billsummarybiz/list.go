@@ -25,6 +25,7 @@ import (
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
+	"hcm/pkg/logs"
 	"hcm/pkg/rest"
 )
 
@@ -55,11 +56,13 @@ func (s *service) ListBizSummary(cts *rest.Contexts) (interface{}, error) {
 		}
 	}
 
-	summary, err := s.client.DataService().Global.Bill.ListBillSummaryBiz(cts.Kit, &core.ListReq{
+	listReq := &core.ListReq{
 		Filter: expression,
 		Page:   req.Page,
-	})
+	}
+	summary, err := s.client.DataService().Global.Bill.ListBillSummaryBiz(cts.Kit, listReq)
 	if err != nil {
+		logs.Errorf("list bill summary biz failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 	return summary, nil

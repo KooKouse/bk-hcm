@@ -111,12 +111,7 @@ const handleConfirm = async () => {
 const getCloudAreas = async () => {
   isDialogBtnLoading.value = true;
   try {
-    const res = await resourceStore.getCloudAreas({
-      page: {
-        start: 0,
-        limit: 500,
-      },
-    });
+    const res = await resourceStore.getAllCloudAreas();
     cloudAreaList.value = res.data?.info || [];
   } finally {
     isDialogBtnLoading.value = false;

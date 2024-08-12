@@ -90,7 +90,7 @@ func toProtoPullerResult(m *tablebill.AccountBillSummaryMain) *dataproto.BillSum
 	}
 }
 
-// ListBillSummarybiz list account bill summary biz with options
+// ListBillSummaryBiz list account bill summary biz with options
 func (svc *service) ListBillSummaryBiz(cts *rest.Contexts) (interface{}, error) {
 	req := new(core.ListReq)
 	if err := cts.DecodeInto(req); err != nil {
