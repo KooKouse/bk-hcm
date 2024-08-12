@@ -22,7 +22,7 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 
 	result, err := fetchAwsBillItems(kt, b, req)
 	if err != nil {
-		logs.Errorf("fetch aws bill items failed: %v, rid: %s", err, kt.Rid)
+		logs.Errorf("fetch aws bill items  for export failed, err: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
 
@@ -37,7 +37,7 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 	rootAccountIDs := converter.MapKeyToSlice(rootAccountIDMap)
 	mainAccountIDs := converter.MapKeyToSlice(mainAccountIDMap)
 	bkBizIDs := converter.MapKeyToSlice(bkBizIDMap)
-	rootAccountMap, mainAccountMap, bizNameMap, err := b.prepareRelatedData(kt, rootAccountIDs,
+	rootAccountMap, mainAccountMap, bizNameMap, err := b.fetchAccountBizInfo(kt, rootAccountIDs,
 		mainAccountIDs, bkBizIDs)
 	if err != nil {
 		logs.Errorf("prepare related data failed: %v, rid: %s", err, kt.Rid)
@@ -126,28 +126,23 @@ func fetchAwsBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq)
 		logs.Errorf("fetch aws bill item count failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
-	limit := totalCount
-	if req.ExportLimit <= limit {
-		limit = req.ExportLimit
-	}
+	exportLimit := min(totalCount, req.ExportLimit)
 
-	result := make([]*billapi.AwsBillItem, 0, limit)
-	page := core.DefaultMaxPageLimit
-	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
-		if limit-offset < uint64(page) {
-			page = uint(limit - offset)
-		}
+	commonOpt := &databill.ItemCommonOpt{
+		Vendor: enumor.Aws,
+		Year:   req.BillYear,
+		Month:  req.BillMonth,
+	}
+	result := make([]*billapi.AwsBillItem, 0, exportLimit)
+	for offset := uint64(0); offset < exportLimit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		left := exportLimit - offset
 		billListReq := &databill.BillItemListReq{
-			ItemCommonOpt: &databill.ItemCommonOpt{
-				Vendor: enumor.Aws,
-				Year:   req.BillYear,
-				Month:  req.BillMonth,
-			},
+			ItemCommonOpt: commonOpt,
 			ListReq: &core.ListReq{
 				Filter: req.Filter,
 				Page: &core.BasePage{
 					Start: uint32(offset),
-					Limit: page,
+					Limit: min(uint(left), core.DefaultMaxPageLimit),
 				},
 			},
 		}

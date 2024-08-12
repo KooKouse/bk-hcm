@@ -2,7 +2,6 @@ package billadjustment
 
 import (
 	"fmt"
-	"time"
 
 	"hcm/cmd/account-server/logics/bill/export"
 	"hcm/pkg/api/account-server/bill"
@@ -19,16 +18,25 @@ import (
 	"hcm/pkg/kit"
 	"hcm/pkg/logs"
 	"hcm/pkg/rest"
+	"hcm/pkg/runtime/filter"
 	"hcm/pkg/thirdparty/esb/cmdb"
 	"hcm/pkg/tools/converter"
 	"hcm/pkg/tools/encode"
 	"hcm/pkg/tools/slice"
 )
 
+const (
+	defaultExportFilename = "bill_adjustment_item"
+)
+
 var (
 	excelHeader = []string{"更新时间", "调账ID", "业务", "二级账号名称", "调账类型",
 		"操作人", "金额", "币种", "调账状态"}
 )
+
+func getHeader() []string {
+	return excelHeader
+}
 
 // ExportBillAdjustmentItem 查询调账明细
 func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, error) {
@@ -47,8 +55,9 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 		return nil, err
 	}
 
-	result, err := b.fetchBillAdjustmentItem(cts, req)
+	result, err := b.fetchBillAdjustmentItem(cts.Kit, req)
 	if err != nil {
+		logs.Errorf("fetch bill adjustment item failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -73,7 +82,7 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 	}
 
 	data := make([][]string, 0, len(result)+1)
-	data = append(data, excelHeader)
+	data = append(data, getHeader())
 	table, err := toRawData(result, mainAccountMap, bizMap)
 	if err != nil {
 		logs.Errorf("convert to raw data error: %s, rid: %s", err, cts.Kit.Rid)
@@ -86,8 +95,7 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 		return nil, err
 	}
 
-	filename := fmt.Sprintf("%s/bill_adjustment_item__%s.csv", constant.BillExportFolderPrefix,
-		time.Now().Format("20060102150405"))
+	filename := export.GenerateExportCSVFilename(constant.BillExportFolderPrefix, defaultExportFilename)
 	base64Str, err := encode.ReaderToBase64Str(buf)
 	if err != nil {
 		return nil, err
@@ -113,7 +121,7 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 	return bill.BillExportResult{DownloadURL: url.URL}, nil
 }
 
-func (b *billAdjustmentSvc) fetchBillAdjustmentItem(cts *rest.Contexts, req *bill.AdjustmentItemExportReq) (
+func (b *billAdjustmentSvc) fetchBillAdjustmentItem(kt *kit.Kit, req *bill.AdjustmentItemExportReq) (
 	[]*billcore.AdjustmentItem, error) {
 
 	var expression = tools.ExpressionAnd(
@@ -127,41 +135,46 @@ func (b *billAdjustmentSvc) fetchBillAdjustmentItem(cts *rest.Contexts, req *bil
 			return nil, err
 		}
 	}
-	details, err := b.client.DataService().Global.Bill.ListBillAdjustmentItem(cts.Kit,
-		&dsbillapi.BillAdjustmentItemListReq{
-			Filter: expression,
-			Page:   core.NewCountPage(),
-		})
+	totalCount, err := b.fetchBillAdjustmentItemCount(kt, expression)
 	if err != nil {
+		logs.Errorf("fetch bill adjustment item count failed, err: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
+	exportLimit := min(totalCount, req.ExportLimit)
 
-	limit := details.Count
-	if req.ExportLimit <= limit {
-		limit = req.ExportLimit
-	}
-
-	result := make([]*billcore.AdjustmentItem, 0, len(details.Details))
-	page := core.DefaultMaxPageLimit
-	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
-		if limit-offset < uint64(page) {
-			page = uint(limit - offset)
+	result := make([]*billcore.AdjustmentItem, 0, exportLimit)
+	for offset := uint64(0); offset < exportLimit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		left := exportLimit - offset
+		listReq := &dsbillapi.BillAdjustmentItemListReq{
+			Filter: expression,
+			Page: &core.BasePage{
+				Start: uint32(offset),
+				Limit: min(uint(left), core.DefaultMaxPageLimit),
+			},
 		}
-		tmpResult, err := b.client.DataService().Global.Bill.ListBillAdjustmentItem(cts.Kit,
-			&dsbillapi.BillAdjustmentItemListReq{
-				Filter: expression,
-				Page: &core.BasePage{
-					Start: uint32(offset),
-					Limit: page,
-				},
-			})
+		tmpResult, err := b.client.DataService().Global.Bill.ListBillAdjustmentItem(kt, listReq)
 		if err != nil {
+			logs.Errorf("list bill adjustment item failed, err: %v, rid: %s", err, kt.Rid)
 			return nil, err
 		}
 		result = append(result, tmpResult.Details...)
 	}
 
 	return result, nil
+}
+
+func (b *billAdjustmentSvc) fetchBillAdjustmentItemCount(kt *kit.Kit,
+	expression *filter.Expression) (uint64, error) {
+
+	listReq := &dsbillapi.BillAdjustmentItemListReq{
+		Filter: expression,
+		Page:   core.NewCountPage(),
+	}
+	details, err := b.client.DataService().Global.Bill.ListBillAdjustmentItem(kt, listReq)
+	if err != nil {
+		return 0, err
+	}
+	return details.Count, nil
 }
 
 func toRawData(details []*billcore.AdjustmentItem, mainAccountMap map[string]*accountset.BaseMainAccount,
@@ -193,18 +206,19 @@ func toRawData(details []*billcore.AdjustmentItem, mainAccountMap map[string]*ac
 }
 
 func (b *billAdjustmentSvc) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error) {
-	expression := &cmdb.QueryFilter{
-		Rule: &cmdb.CombinedRule{
-			Condition: "AND",
-			Rules: []cmdb.Rule{
-				&cmdb.AtomRule{
-					Field:    "bk_biz_id",
-					Operator: "in",
-					Value:    slice.Unique(ids),
-				},
-			},
+	ids = slice.Unique(ids)
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rules := []cmdb.Rule{
+		&cmdb.AtomRule{
+			Field:    "bk_biz_id",
+			Operator: "in",
+			Value:    ids,
 		},
 	}
+	expression := &cmdb.QueryFilter{Rule: &cmdb.CombinedRule{Condition: "AND", Rules: rules}}
+
 	params := &cmdb.SearchBizParams{
 		BizPropertyFilter: expression,
 		Fields:            []string{"bk_biz_id", "bk_biz_name"},

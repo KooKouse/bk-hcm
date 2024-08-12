@@ -22,8 +22,8 @@ package billitem
 import (
 	"bytes"
 	"fmt"
-	"time"
 
+	"hcm/cmd/account-server/logics/bill/export"
 	accountset "hcm/pkg/api/core/account-set"
 	"hcm/pkg/api/data-service/cos"
 	"hcm/pkg/criteria/constant"
@@ -42,6 +42,10 @@ import (
 	"hcm/pkg/rest"
 
 	"github.com/shopspring/decimal"
+)
+
+const (
+	defaultExportFilename = "bill_item"
 )
 
 var (
@@ -134,8 +138,7 @@ func (b *billItemSvc) getExchangeRate(kt *kit.Kit, year, month int) (*decimal.De
 }
 
 func (b *billItemSvc) uploadFileAndReturnUrl(kt *kit.Kit, buf *bytes.Buffer) (string, error) {
-	filename := fmt.Sprintf("%s/bill_item_%s.csv", constant.BillExportFolderPrefix,
-		time.Now().Format("20060102150405"))
+	filename := export.GenerateExportCSVFilename(constant.BillExportFolderPrefix, defaultExportFilename)
 	base64Str, err := encode.ReaderToBase64Str(buf)
 	if err != nil {
 		return "", err
@@ -184,6 +187,7 @@ func (b *billItemSvc) listMainAccountByIDs(kt *kit.Kit, mainAccountIDs []string)
 func (b *billItemSvc) listRootAccount(kt *kit.Kit,
 	rootAccountIDs []string) (map[string]*accountset.BaseRootAccount, error) {
 
+	rootAccountIDs = slice.Unique(rootAccountIDs)
 	if len(rootAccountIDs) == 0 {
 		return nil, nil
 	}
@@ -206,21 +210,18 @@ func (b *billItemSvc) listRootAccount(kt *kit.Kit,
 }
 
 func (b *billItemSvc) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error) {
+	ids = slice.Unique(ids)
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	expression := &cmdb.QueryFilter{
-		Rule: &cmdb.CombinedRule{
-			Condition: "AND",
-			Rules: []cmdb.Rule{
-				&cmdb.AtomRule{
-					Field:    "bk_biz_id",
-					Operator: "in",
-					Value:    ids,
-				},
-			},
+	rules := []cmdb.Rule{
+		&cmdb.AtomRule{
+			Field:    "bk_biz_id",
+			Operator: "in",
+			Value:    ids,
 		},
 	}
+	expression := &cmdb.QueryFilter{Rule: &cmdb.CombinedRule{Condition: "AND", Rules: rules}}
 	params := &cmdb.SearchBizParams{
 		BizPropertyFilter: expression,
 		Fields:            []string{"bk_biz_id", "bk_biz_name"},
@@ -240,7 +241,7 @@ func (b *billItemSvc) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error
 }
 
 // prepareRelateData 准备关联数据
-func (b *billItemSvc) prepareRelatedData(kt *kit.Kit, rootAccountIDs, mainAccountIDs []string, bkBizIDs []int64) (
+func (b *billItemSvc) fetchAccountBizInfo(kt *kit.Kit, rootAccountIDs, mainAccountIDs []string, bkBizIDs []int64) (
 	rootAccountMap map[string]*accountset.BaseRootAccount, mainAccountMap map[string]*accountset.BaseMainAccount,
 	bizNameMap map[int64]string, err error) {
 

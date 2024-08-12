@@ -49,7 +49,7 @@ func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 		logs.Errorf("list gcp regions failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
-	rootAccountMap, mainAccountMap, bizNameMap, err := b.prepareRelatedData(kt, rootAccountIDs,
+	rootAccountMap, mainAccountMap, bizNameMap, err := b.fetchAccountBizInfo(kt, rootAccountIDs,
 		mainAccountIDs, bkBizIDs)
 	if err != nil {
 		logs.Errorf("prepare related data failed: %v, rid: %s", err, kt.Rid)
@@ -132,28 +132,23 @@ func fetchGcpBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq)
 		logs.Errorf("fetch gcp bill item count failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
-	limit := totalCount
-	if req.ExportLimit <= limit {
-		limit = req.ExportLimit
-	}
+	exportLimit := min(totalCount, req.ExportLimit)
 
-	result := make([]*billapi.GcpBillItem, 0, limit)
-	page := core.DefaultMaxPageLimit
-	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
-		if limit-offset < uint64(page) {
-			page = uint(limit - offset)
-		}
+	commonOpt := &databill.ItemCommonOpt{
+		Vendor: enumor.Gcp,
+		Year:   req.BillYear,
+		Month:  req.BillMonth,
+	}
+	result := make([]*billapi.GcpBillItem, 0, exportLimit)
+	for offset := uint64(0); offset < exportLimit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		left := exportLimit - offset
 		billListReq := &databill.BillItemListReq{
-			ItemCommonOpt: &databill.ItemCommonOpt{
-				Vendor: enumor.Gcp,
-				Year:   req.BillYear,
-				Month:  req.BillMonth,
-			},
+			ItemCommonOpt: commonOpt,
 			ListReq: &core.ListReq{
 				Filter: req.Filter,
 				Page: &core.BasePage{
 					Start: uint32(offset),
-					Limit: page,
+					Limit: min(uint(left), core.DefaultMaxPageLimit),
 				},
 			},
 		}

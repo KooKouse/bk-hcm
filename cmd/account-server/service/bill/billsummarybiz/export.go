@@ -2,7 +2,6 @@ package billsummarybiz
 
 import (
 	"fmt"
-	"time"
 
 	"hcm/cmd/account-server/logics/bill/export"
 	"hcm/pkg/api/account-server/bill"
@@ -23,10 +22,18 @@ import (
 	"github.com/TencentBlueKing/gopkg/conv"
 )
 
+const (
+	defaultExportFilename = "bill_summary_biz"
+)
+
 var (
 	excelHeader = []string{"运营产品ID", "运营产品名称", "已确认账单人民币（元）", "已确认账单美金（美元）",
 		"当前账单人民币（元）", "当前账单美金（美元）"}
 )
+
+func getHeader() []string {
+	return excelHeader
+}
 
 // ExportBizSummary export biz summary with options
 func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
@@ -61,7 +68,7 @@ func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 	}
 
 	data := make([][]string, 0, len(result)+1)
-	data = append(data, excelHeader)
+	data = append(data, getHeader())
 	data = append(data, toRawData(result, bizMap)...)
 	buf, err := export.GenerateCSV(data)
 	if err != nil {
@@ -69,8 +76,7 @@ func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 		return nil, err
 	}
 
-	filename := fmt.Sprintf("%s/bill_summary_biz_%s.csv", constant.BillExportFolderPrefix,
-		time.Now().Format("20060102150405"))
+	filename := export.GenerateExportCSVFilename(constant.BillExportFolderPrefix, defaultExportFilename)
 	base64Str, err := encode.ReaderToBase64Str(buf)
 	if err != nil {
 		return nil, err
@@ -134,24 +140,19 @@ func (s *service) fetchBizSummary(cts *rest.Contexts, req *bill.BizSummaryExport
 		return nil, err
 	}
 
-	limit := details.Count
-	if req.ExportLimit <= limit {
-		limit = req.ExportLimit
-	}
+	exportLimit := min(details.Count, req.ExportLimit)
 
-	result := make([]*billproto.BillSummaryBizResult, 0, limit)
-	page := core.DefaultMaxPageLimit
-	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
-		if limit-offset < uint64(page) {
-			page = uint(limit - offset)
-		}
-		tmpResult, err := s.client.DataService().Global.Bill.ListBillSummaryBiz(cts.Kit, &core.ListReq{
+	result := make([]*billproto.BillSummaryBizResult, 0, exportLimit)
+	for offset := uint64(0); offset < exportLimit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		left := exportLimit - offset
+		listReq := &core.ListReq{
 			Filter: expression,
 			Page: &core.BasePage{
 				Start: uint32(offset),
-				Limit: page,
+				Limit: min(uint(left), core.DefaultMaxPageLimit),
 			},
-		})
+		}
+		tmpResult, err := s.client.DataService().Global.Bill.ListBillSummaryBiz(cts.Kit, listReq)
 		if err != nil {
 			return nil, err
 		}
@@ -161,18 +162,19 @@ func (s *service) fetchBizSummary(cts *rest.Contexts, req *bill.BizSummaryExport
 }
 
 func (s *service) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error) {
-	expression := &cmdb.QueryFilter{
-		Rule: &cmdb.CombinedRule{
-			Condition: "AND",
-			Rules: []cmdb.Rule{
-				&cmdb.AtomRule{
-					Field:    "bk_biz_id",
-					Operator: "in",
-					Value:    slice.Unique(ids),
-				},
-			},
+	ids = slice.Unique(ids)
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rules := []cmdb.Rule{
+		&cmdb.AtomRule{
+			Field:    "bk_biz_id",
+			Operator: "in",
+			Value:    ids,
 		},
 	}
+	expression := &cmdb.QueryFilter{Rule: &cmdb.CombinedRule{Condition: "AND", Rules: rules}}
+
 	params := &cmdb.SearchBizParams{
 		BizPropertyFilter: expression,
 		Fields:            []string{"bk_biz_id", "bk_biz_name"},

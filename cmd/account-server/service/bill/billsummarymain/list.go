@@ -151,18 +151,19 @@ func (s *service) listRootAccount(kt *kit.Kit, accountIDs []string) (map[string]
 }
 
 func (s *service) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error) {
-	expression := &cmdb.QueryFilter{
-		Rule: &cmdb.CombinedRule{
-			Condition: "AND",
-			Rules: []cmdb.Rule{
-				&cmdb.AtomRule{
-					Field:    "bk_biz_id",
-					Operator: "in",
-					Value:    slice.Unique(ids),
-				},
-			},
+	ids = slice.Unique(ids)
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rules := []cmdb.Rule{
+		&cmdb.AtomRule{
+			Field:    "bk_biz_id",
+			Operator: "in",
+			Value:    ids,
 		},
 	}
+	expression := &cmdb.QueryFilter{Rule: &cmdb.CombinedRule{Condition: "AND", Rules: rules}}
+
 	params := &cmdb.SearchBizParams{
 		BizPropertyFilter: expression,
 		Fields:            []string{"bk_biz_id", "bk_biz_name"},

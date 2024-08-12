@@ -20,8 +20,8 @@
 package billsummarymain
 
 import (
+	"bytes"
 	"fmt"
-	"time"
 
 	"hcm/cmd/account-server/logics/bill/export"
 	asbillapi "hcm/pkg/api/account-server/bill"
@@ -33,16 +33,25 @@ import (
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
+	"hcm/pkg/kit"
 	"hcm/pkg/logs"
 	"hcm/pkg/rest"
 	"hcm/pkg/tools/converter"
 	"hcm/pkg/tools/encode"
 )
 
+const (
+	defaultExportFilename = "bill_summary_main"
+)
+
 var (
 	excelHeader = []string{"二级账号ID", "二级账号名称", "一级账号ID", "一级账号名称", "业务",
 		"已确认账单人民币（元）", "已确认账单美金（美元）", "当前账单人民币（元）", "当前账单美金（美元）"}
 )
+
+func getHeader() []string {
+	return excelHeader
+}
 
 // ExportMainAccountSummary export main account summary with options
 func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, error) {
@@ -62,6 +71,7 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 
 	result, err := s.fetchMainAccountSummary(cts, req)
 	if err != nil {
+		logs.Errorf("fetch main account summary error: %s, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -94,7 +104,7 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 	}
 
 	data := make([][]string, 0, len(result)+1)
-	data = append(data, excelHeader)
+	data = append(data, getHeader())
 	table, err := toRawData(result, mainAccountMap, rootAccountMap, bizMap)
 	if err != nil {
 		logs.Errorf("convert to raw data error: %s, rid: %s", err, cts.Kit.Rid)
@@ -106,32 +116,39 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 		logs.Errorf("generate csv failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
+	url, err := s.uploadFileAndReturnUrl(cts.Kit, buf)
+	if err != nil {
+		logs.Errorf("upload file failed, err: %v, rid: %s", err, cts.Kit.Rid)
+		return nil, err
+	}
 
-	filename := fmt.Sprintf("%s/bill_summary_main_%s.csv", constant.BillExportFolderPrefix,
-		time.Now().Format("20060102150405"))
+	return asbillapi.BillExportResult{DownloadURL: url}, nil
+}
+
+func (s *service) uploadFileAndReturnUrl(kt *kit.Kit, buf *bytes.Buffer) (string, error) {
+	filename := export.GenerateExportCSVFilename(constant.BillExportFolderPrefix, defaultExportFilename)
 	base64Str, err := encode.ReaderToBase64Str(buf)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	uploadFileReq := &cos.UploadFileReq{
 		Filename:   filename,
 		FileBase64: base64Str,
 	}
-	if err = s.client.DataService().Global.Cos.Upload(cts.Kit, uploadFileReq); err != nil {
-		logs.Errorf("update file failed, err: %v, rid: %s", err, cts.Kit.Rid)
-		return nil, err
+	if err = s.client.DataService().Global.Cos.Upload(kt, uploadFileReq); err != nil {
+		logs.Errorf("update file failed, err: %v, rid: %s", err, kt.Rid)
+		return "", err
 	}
 	generateURLReq := &cos.GenerateTemporalUrlReq{
 		Filename:   filename,
 		TTLSeconds: 3600,
 	}
-	url, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download", generateURLReq)
+	result, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(kt, "download", generateURLReq)
 	if err != nil {
-		logs.Errorf("generate url failed, err: %v, rid: %s", err, cts.Kit.Rid)
-		return nil, err
+		logs.Errorf("generate url failed, err: %v, rid: %s", err, kt.Rid)
+		return "", err
 	}
-
-	return asbillapi.BillExportResult{DownloadURL: url.URL}, nil
+	return result.URL, nil
 }
 
 func (s *service) fetchMainAccountSummary(cts *rest.Contexts, req *asbillapi.MainAccountSummaryExportReq) (
@@ -149,32 +166,27 @@ func (s *service) fetchMainAccountSummary(cts *rest.Contexts, req *asbillapi.Mai
 		}
 	}
 
-	details, err := s.client.DataService().Global.Bill.ListBillSummaryMain(cts.Kit, &dsbillapi.BillSummaryMainListReq{
+	countReq := &dsbillapi.BillSummaryMainListReq{
 		Filter: expression,
 		Page:   core.NewCountPage(),
-	})
+	}
+	details, err := s.client.DataService().Global.Bill.ListBillSummaryMain(cts.Kit, countReq)
 	if err != nil {
 		return nil, err
 	}
 
-	limit := details.Count
-	if req.ExportLimit <= limit {
-		limit = req.ExportLimit
-	}
-
-	result := make([]*dsbillapi.BillSummaryMainResult, 0, len(details.Details))
-	page := core.DefaultMaxPageLimit
-	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
-		if limit-offset < uint64(page) {
-			page = uint(limit - offset)
-		}
-		tmpResult, err := s.client.DataService().Global.Bill.ListBillSummaryMain(cts.Kit, &dsbillapi.BillSummaryMainListReq{
+	exportLimit := min(details.Count, req.ExportLimit)
+	result := make([]*dsbillapi.BillSummaryMainResult, 0, exportLimit)
+	for offset := uint64(0); offset < exportLimit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		left := exportLimit - offset
+		listReq := &dsbillapi.BillSummaryMainListReq{
 			Filter: expression,
 			Page: &core.BasePage{
 				Start: uint32(offset),
-				Limit: page,
+				Limit: min(uint(left), core.DefaultMaxPageLimit),
 			},
-		})
+		}
+		tmpResult, err := s.client.DataService().Global.Bill.ListBillSummaryMain(cts.Kit, listReq)
 		if err != nil {
 			return nil, err
 		}

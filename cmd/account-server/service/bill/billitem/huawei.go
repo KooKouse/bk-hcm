@@ -20,19 +20,19 @@ import (
 )
 
 var (
-	//item.Extension.MeasureId, // 金额单位。 1：元
+	// 金额单位。 1：元
 	huaWeiMeasureIdMap = map[int32]string{
 		1: "元",
 	}
 
-	// item.Extension.ChargeMode, // 计费模式。 1：包年/包月3：按需10：预留实例
+	// 计费模式。 1：包年/包月3：按需10：预留实例
 	huaWeiChargeModeMap = map[string]string{
 		"1":  "包年/包月",
 		"3":  "按需",
 		"10": "预留实例",
 	}
 
-	//	item.Extension.BillType,
+	// 账单类型
 	huaWeiBillTypeMap = map[int32]string{
 		1:   "消费-新购",
 		2:   "消费-续订",
@@ -73,7 +73,7 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 	mainAccountIDs := converter.MapKeyToSlice(mainAccountIDMap)
 	bkBizIDs := converter.MapKeyToSlice(bkBizIDMap)
 
-	rootAccountMap, mainAccountMap, bizNameMap, err := b.prepareRelatedData(kt, rootAccountIDs,
+	rootAccountMap, mainAccountMap, bizNameMap, err := b.fetchAccountBizInfo(kt, rootAccountIDs,
 		mainAccountIDs, bkBizIDs)
 	if err != nil {
 		logs.Errorf("prepare related data failed: %v, rid: %s", err, kt.Rid)
@@ -161,28 +161,23 @@ func fetchHuaweiBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemR
 		logs.Errorf("fetch huawei bill item count failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
-	limit := totalCount
-	if req.ExportLimit <= limit {
-		limit = req.ExportLimit
-	}
+	exportLimit := min(totalCount, req.ExportLimit)
 
-	result := make([]*billapi.HuaweiBillItem, 0, limit)
-	page := core.DefaultMaxPageLimit
-	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
-		if limit-offset < uint64(page) {
-			page = uint(limit - offset)
-		}
+	commonOpt := &databill.ItemCommonOpt{
+		Vendor: enumor.HuaWei,
+		Year:   req.BillYear,
+		Month:  req.BillMonth,
+	}
+	result := make([]*billapi.HuaweiBillItem, 0, exportLimit)
+	for offset := uint64(0); offset < exportLimit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		left := exportLimit - offset
 		billListReq := &databill.BillItemListReq{
-			ItemCommonOpt: &databill.ItemCommonOpt{
-				Vendor: enumor.HuaWei,
-				Year:   req.BillYear,
-				Month:  req.BillMonth,
-			},
+			ItemCommonOpt: commonOpt,
 			ListReq: &core.ListReq{
 				Filter: req.Filter,
 				Page: &core.BasePage{
 					Start: uint32(offset),
-					Limit: page,
+					Limit: min(uint(left), core.DefaultMaxPageLimit),
 				},
 			},
 		}

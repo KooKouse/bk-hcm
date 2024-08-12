@@ -21,7 +21,6 @@ package billsummaryroot
 
 import (
 	"fmt"
-	"time"
 
 	"hcm/cmd/account-server/logics/bill/export"
 	asbillapi "hcm/pkg/api/account-server/bill"
@@ -44,11 +43,19 @@ import (
 	"github.com/TencentBlueKing/gopkg/conv"
 )
 
+const (
+	defaultExportFilename = "bill_summary_root"
+)
+
 var (
 	excelHeader = []string{"一级账号ID", "一级账号名称", "账号状态", "账单同步（人民币-元）当月", "账单同步（人民币-元）上月",
 		"账单同步（美金-美元）当月", "账单同步（美金-美元）上月", "账单同步环比", "当前账单人民币（元）", "当前账单美金（美元）",
 		"调账人民币（元）", "调账美金（美元）"}
 )
+
+func getHeader() []string {
+	return excelHeader
+}
 
 // ExportRootAccountSummary export root account summary with options
 func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, error) {
@@ -83,7 +90,7 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 	}
 
 	data := make([][]string, 0, len(result)+1)
-	data = append(data, excelHeader)
+	data = append(data, getHeader())
 	table, err := toRawData(result, rootAccountMap)
 	if err != nil {
 		logs.Errorf("convert to raw data failed, err: %v, rid: %s", err, cts.Kit.Rid)
@@ -96,8 +103,7 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 		return nil, err
 	}
 
-	filename := fmt.Sprintf("%s/bill_summary_root_%s.csv", constant.BillExportFolderPrefix,
-		time.Now().Format("20060102150405"))
+	filename := export.GenerateExportCSVFilename(constant.BillExportFolderPrefix, defaultExportFilename)
 	base64Str, err := encode.ReaderToBase64Str(buf)
 	if err != nil {
 		return nil, err
@@ -148,22 +154,15 @@ func (s *service) fetchRootAccountSummary(cts *rest.Contexts, req *asbillapi.Roo
 		return nil, err
 	}
 
-	limit := *details.Count
-	if req.ExportLimit <= limit {
-		limit = req.ExportLimit
-	}
-
-	result := make([]*dsbillapi.BillSummaryRootResult, 0, *details.Count)
-	page := core.DefaultMaxPageLimit
-	for offset := uint64(0); offset < limit; offset = offset + uint64(core.DefaultMaxPageLimit) {
-		if limit-offset < uint64(page) {
-			page = uint(limit - offset)
-		}
+	exportLimit := min(*details.Count, req.ExportLimit)
+	result := make([]*dsbillapi.BillSummaryRootResult, 0, exportLimit)
+	for offset := uint64(0); offset < exportLimit; offset = offset + uint64(core.DefaultMaxPageLimit) {
+		left := exportLimit - offset
 		listReq := &dsbillapi.BillSummaryRootListReq{
 			Filter: expression,
 			Page: &core.BasePage{
 				Start: uint32(offset),
-				Limit: core.DefaultMaxPageLimit,
+				Limit: min(uint(left), core.DefaultMaxPageLimit),
 			},
 		}
 		tmpResult, err := s.client.DataService().Global.Bill.ListBillSummaryRoot(cts.Kit, listReq)
