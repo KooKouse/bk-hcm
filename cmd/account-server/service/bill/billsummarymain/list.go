@@ -108,6 +108,7 @@ func (s *service) ListMainAccountSummary(cts *rest.Contexts) (interface{}, error
 }
 
 func (s *service) listMainAccount(kt *kit.Kit, mainAccountIDs []string) (map[string]*accountset.BaseMainAccount, error) {
+	mainAccountIDs = slice.Unique(mainAccountIDs)
 	if len(mainAccountIDs) == 0 {
 		return nil, nil
 	}
@@ -130,6 +131,7 @@ func (s *service) listMainAccount(kt *kit.Kit, mainAccountIDs []string) (map[str
 }
 
 func (s *service) listRootAccount(kt *kit.Kit, accountIDs []string) (map[string]*accountset.BaseRootAccount, error) {
+	accountIDs = slice.Unique(accountIDs)
 	if len(accountIDs) == 0 {
 		return nil, nil
 	}

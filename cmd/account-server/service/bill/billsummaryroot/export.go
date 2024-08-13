@@ -204,6 +204,7 @@ func toRawData(details []*dsbillapi.BillSummaryRootResult, accountMap map[string
 }
 
 func (s *service) listRootAccount(kt *kit.Kit, accountIDs []string) (map[string]*accountset.BaseRootAccount, error) {
+	accountIDs = slice.Unique(accountIDs)
 	if len(accountIDs) == 0 {
 		return nil, nil
 	}

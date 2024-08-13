@@ -239,6 +239,9 @@ func (b *billAdjustmentSvc) listBiz(kt *kit.Kit, ids []int64) (map[int64]string,
 
 func (b *billAdjustmentSvc) listMainAccount(kt *kit.Kit, ids []string) (map[string]*accountset.BaseMainAccount, error) {
 	ids = slice.Unique(ids)
+	if len(ids) == 0 {
+		return nil, nil
+	}
 	expression, err := tools.And(tools.RuleIn("id", ids))
 	if err != nil {
 		return nil, err

@@ -50,6 +50,10 @@ var (
 		101: "调账-补偿税金",
 		102: "调账-扣费税金",
 	}
+
+	huaWeiExcelHeader = []string{"产品名称", "云服务区名称", "金额单位", "使用量类型", "使用量度量单位", "云服务类型编码",
+		"云服务类型名称", "资源类型编码", "资源类型名称", "计费模式", "账单类型", "套餐内使用量", "使用量", "预留实例使用量", "币种",
+		"汇率", "本期应付外币金额（元）", "本期应付人民币金额（元）"}
 )
 
 func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillItemReq,
@@ -61,22 +65,9 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 		return nil, err
 	}
 
-	rootAccountIDMap := make(map[string]struct{})
-	mainAccountIDMap := make(map[string]struct{})
-	bkBizIDMap := make(map[int64]struct{})
-	for _, item := range result {
-		rootAccountIDMap[item.RootAccountID] = struct{}{}
-		mainAccountIDMap[item.MainAccountID] = struct{}{}
-		bkBizIDMap[item.BkBizID] = struct{}{}
-	}
-	rootAccountIDs := converter.MapKeyToSlice(rootAccountIDMap)
-	mainAccountIDs := converter.MapKeyToSlice(mainAccountIDMap)
-	bkBizIDs := converter.MapKeyToSlice(bkBizIDMap)
-
-	rootAccountMap, mainAccountMap, bizNameMap, err := b.fetchAccountBizInfo(kt, rootAccountIDs,
-		mainAccountIDs, bkBizIDs)
+	rootAccountMap, mainAccountMap, bizNameMap, err := fetchAccountBizInfo(kt, b, result)
 	if err != nil {
-		logs.Errorf("prepare related data failed: %v, rid: %s", err, kt.Rid)
+		logs.Errorf("fetch account biz info failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
 

@@ -12,9 +12,14 @@ import (
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/kit"
 	"hcm/pkg/logs"
-	"hcm/pkg/tools/converter"
 
 	"github.com/shopspring/decimal"
+)
+
+var (
+	awsExcelHeader = []string{"地区名称", "发票ID", "账单实体", "产品代号", "服务组", "产品名称", "API操作", "产品规格",
+		"实例类型", "资源ID", "计费方式", "计费类型", "计费说明", "用量", "单位", "折扣前成本（外币）", "外币种类",
+		"人民币成本（元）", "汇率"}
 )
 
 func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemReq,
@@ -26,21 +31,9 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 		return nil, err
 	}
 
-	rootAccountIDMap := make(map[string]struct{})
-	mainAccountIDMap := make(map[string]struct{})
-	bkBizIDMap := make(map[int64]struct{})
-	for _, item := range result {
-		rootAccountIDMap[item.RootAccountID] = struct{}{}
-		mainAccountIDMap[item.MainAccountID] = struct{}{}
-		bkBizIDMap[item.BkBizID] = struct{}{}
-	}
-	rootAccountIDs := converter.MapKeyToSlice(rootAccountIDMap)
-	mainAccountIDs := converter.MapKeyToSlice(mainAccountIDMap)
-	bkBizIDs := converter.MapKeyToSlice(bkBizIDMap)
-	rootAccountMap, mainAccountMap, bizNameMap, err := b.fetchAccountBizInfo(kt, rootAccountIDs,
-		mainAccountIDs, bkBizIDs)
+	rootAccountMap, mainAccountMap, bizNameMap, err := fetchAccountBizInfo(kt, b, result)
 	if err != nil {
-		logs.Errorf("prepare related data failed: %v, rid: %s", err, kt.Rid)
+		logs.Errorf("fetch account biz info failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
 

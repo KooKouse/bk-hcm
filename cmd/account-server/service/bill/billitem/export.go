@@ -25,9 +25,11 @@ import (
 
 	"hcm/cmd/account-server/logics/bill/export"
 	accountset "hcm/pkg/api/core/account-set"
+	billapi "hcm/pkg/api/core/bill"
 	"hcm/pkg/api/data-service/cos"
 	"hcm/pkg/criteria/constant"
 	"hcm/pkg/thirdparty/esb/cmdb"
+	"hcm/pkg/tools/converter"
 	"hcm/pkg/tools/encode"
 	"hcm/pkg/tools/slice"
 
@@ -51,20 +53,9 @@ const (
 var (
 	commonExcelHeader = []string{"站点类型", "核算年月", "业务名称", "一级帐号名称", "二级帐号名称", "地域"}
 
-	gcpExcelHeader = []string{"Region位置", "项目ID", "项目名称", "服务分类", "服务分类名称", "Sku名称", "外币类型",
-		"用量单位", "用量", "外币成本(元)", "汇率", "人民币成本(元)"}
-
 	azureExcelHeader = []string{"区域", "地区编码", "核算年月", "业务名称",
 		"账号邮箱", "子账号名称", "服务一级类别名称", "服务二级类别名称", "服务三级类别名称", "产品名称", "资源类别",
 		"计量地区", "资源地区编码", "单位", "用量", "折后税前成本（外币）", "币种", "汇率", "RMB成本（元）"}
-
-	huaWeiExcelHeader = []string{"产品名称", "云服务区名称", "金额单位", "使用量类型", "使用量度量单位", "云服务类型编码",
-		"云服务类型名称", "资源类型编码", "资源类型名称", "计费模式", "账单类型", "套餐内使用量", "使用量", "预留实例使用量", "币种",
-		"汇率", "本期应付外币金额（元）", "本期应付人民币金额（元）"}
-
-	awsExcelHeader = []string{"地区名称", "发票ID", "账单实体", "产品代号", "服务组", "产品名称", "API操作", "产品规格",
-		"实例类型", "资源ID", "计费方式", "计费类型", "计费说明", "用量", "单位", "折扣前成本（外币）", "外币种类",
-		"人民币成本（元）", "汇率"}
 )
 
 // ExportBillItems 导出账单明细
@@ -106,6 +97,45 @@ func (b *billItemSvc) ExportBillItems(cts *rest.Contexts) (any, error) {
 	default:
 		return nil, fmt.Errorf("unsupport %s vendor", vendor)
 	}
+}
+
+// Exporter 账单导出器
+type Exporter[T billapi.BillItemExtension] interface {
+	GetHeader() []string
+}
+
+// CommonExporter 通用账单导出器
+type CommonExporter[T billapi.BillItemExtension] struct {
+}
+
+// GetHeader ...
+func (c *CommonExporter[T]) GetHeader() []string {
+	return commonExcelHeader
+}
+
+// fetchAccountBizInfo ...
+func fetchAccountBizInfo[T billapi.BillItemExtension](kt *kit.Kit, b *billItemSvc, records []*billapi.BillItem[T]) (
+	rootAccountMap map[string]*accountset.BaseRootAccount, mainAccountMap map[string]*accountset.BaseMainAccount,
+	bizNameMap map[int64]string, err error) {
+
+	rootAccountIDMap := make(map[string]struct{})
+	mainAccountIDMap := make(map[string]struct{})
+	bkBizIDMap := make(map[int64]struct{})
+	for _, item := range records {
+		rootAccountIDMap[item.RootAccountID] = struct{}{}
+		mainAccountIDMap[item.MainAccountID] = struct{}{}
+		bkBizIDMap[item.BkBizID] = struct{}{}
+	}
+	rootAccountIDs := converter.MapKeyToSlice(rootAccountIDMap)
+	mainAccountIDs := converter.MapKeyToSlice(mainAccountIDMap)
+	bkBizIDs := converter.MapKeyToSlice(bkBizIDMap)
+	rootAccountMap, mainAccountMap, bizNameMap, err = b.fetchAccountBizInfo(kt, rootAccountIDs,
+		mainAccountIDs, bkBizIDs)
+	if err != nil {
+		logs.Errorf("prepare related data failed: %v, rid: %s", err, kt.Rid)
+		return nil, nil, nil, err
+	}
+	return rootAccountMap, mainAccountMap, bizNameMap, nil
 }
 
 func (b *billItemSvc) getExchangeRate(kt *kit.Kit, year, month int) (*decimal.Decimal, error) {
@@ -163,6 +193,7 @@ func (b *billItemSvc) uploadFileAndReturnUrl(kt *kit.Kit, buf *bytes.Buffer) (st
 }
 
 func (b *billItemSvc) listMainAccountByIDs(kt *kit.Kit, mainAccountIDs []string) (map[string]*accountset.BaseMainAccount, error) {
+	mainAccountIDs = slice.Unique(mainAccountIDs)
 	if len(mainAccountIDs) == 0 {
 		return nil, nil
 	}

@@ -19,6 +19,11 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+var (
+	gcpExcelHeader = []string{"Region位置", "项目ID", "项目名称", "服务分类", "服务分类名称", "Sku名称", "外币类型",
+		"用量单位", "用量", "外币成本(元)", "汇率", "人民币成本(元)"}
+)
+
 func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemReq,
 	rate *decimal.Decimal) (any, error) {
 
@@ -28,31 +33,21 @@ func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 	}
 
 	regionIDMap := make(map[string]struct{})
-	rootAccountIDMap := make(map[string]struct{})
-	mainAccountIDMap := make(map[string]struct{})
-	bkBizIDMap := make(map[int64]struct{})
 	for _, item := range result {
 		if item.Extension.GcpRawBillItem != nil {
 			regionIDMap[*item.Extension.Region] = struct{}{}
 		}
-		rootAccountIDMap[item.RootAccountID] = struct{}{}
-		mainAccountIDMap[item.MainAccountID] = struct{}{}
-		bkBizIDMap[item.BkBizID] = struct{}{}
 	}
-	rootAccountIDs := converter.MapKeyToSlice(rootAccountIDMap)
-	mainAccountIDs := converter.MapKeyToSlice(mainAccountIDMap)
-	bkBizIDs := converter.MapKeyToSlice(bkBizIDMap)
 	regionIDs := converter.MapKeyToSlice(regionIDMap)
-
 	regionMap, err := b.listGcpRegions(kt, regionIDs)
 	if err != nil {
 		logs.Errorf("list gcp regions failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
-	rootAccountMap, mainAccountMap, bizNameMap, err := b.fetchAccountBizInfo(kt, rootAccountIDs,
-		mainAccountIDs, bkBizIDs)
+
+	rootAccountMap, mainAccountMap, bizNameMap, err := fetchAccountBizInfo(kt, b, result)
 	if err != nil {
-		logs.Errorf("prepare related data failed: %v, rid: %s", err, kt.Rid)
+		logs.Errorf("fetch account biz info failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
 
@@ -178,6 +173,7 @@ func fetchGcpBillItemCount(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItem
 }
 
 func (b *billItemSvc) listGcpRegions(kt *kit.Kit, regionIDs []string) (map[string]string, error) {
+	regionIDs = slice.Unique(regionIDs)
 	if len(regionIDs) == 0 {
 		return nil, nil
 	}
