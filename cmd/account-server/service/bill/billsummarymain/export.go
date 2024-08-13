@@ -44,13 +44,9 @@ const (
 	defaultExportFilename = "bill_summary_main"
 )
 
-var (
-	excelHeader = []string{"二级账号ID", "二级账号名称", "一级账号ID", "一级账号名称", "业务",
-		"已确认账单人民币（元）", "已确认账单美金（美元）", "当前账单人民币（元）", "当前账单美金（美元）"}
-)
-
 func getHeader() []string {
-	return excelHeader
+	return []string{"二级账号ID", "二级账号名称", "一级账号ID", "一级账号名称", "业务",
+		"已确认账单人民币（元）", "已确认账单美金（美元）", "当前账单人民币（元）", "当前账单美金（美元）"}
 }
 
 // ExportMainAccountSummary export main account summary with options

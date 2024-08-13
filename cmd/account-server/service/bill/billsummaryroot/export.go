@@ -47,14 +47,10 @@ const (
 	defaultExportFilename = "bill_summary_root"
 )
 
-var (
-	excelHeader = []string{"一级账号ID", "一级账号名称", "账号状态", "账单同步（人民币-元）当月", "账单同步（人民币-元）上月",
+func getHeader() []string {
+	return []string{"一级账号ID", "一级账号名称", "账号状态", "账单同步（人民币-元）当月", "账单同步（人民币-元）上月",
 		"账单同步（美金-美元）当月", "账单同步（美金-美元）上月", "账单同步环比", "当前账单人民币（元）", "当前账单美金（美元）",
 		"调账人民币（元）", "调账美金（美元）"}
-)
-
-func getHeader() []string {
-	return excelHeader
 }
 
 // ExportRootAccountSummary export root account summary with options

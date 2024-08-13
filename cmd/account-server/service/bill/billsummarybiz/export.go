@@ -26,13 +26,9 @@ const (
 	defaultExportFilename = "bill_summary_biz"
 )
 
-var (
-	excelHeader = []string{"运营产品ID", "运营产品名称", "已确认账单人民币（元）", "已确认账单美金（美元）",
-		"当前账单人民币（元）", "当前账单美金（美元）"}
-)
-
 func getHeader() []string {
-	return excelHeader
+	return []string{"运营产品ID", "运营产品名称", "已确认账单人民币（元）", "已确认账单美金（美元）",
+		"当前账单人民币（元）", "当前账单美金（美元）"}
 }
 
 // ExportBizSummary export biz summary with options

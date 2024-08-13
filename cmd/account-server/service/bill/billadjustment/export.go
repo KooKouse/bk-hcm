@@ -29,13 +29,9 @@ const (
 	defaultExportFilename = "bill_adjustment_item"
 )
 
-var (
-	excelHeader = []string{"更新时间", "调账ID", "业务", "二级账号名称", "调账类型",
-		"操作人", "金额", "币种", "调账状态"}
-)
-
 func getHeader() []string {
-	return excelHeader
+	return []string{"更新时间", "调账ID", "业务", "二级账号名称", "调账类型",
+		"操作人", "金额", "币种", "调账状态"}
 }
 
 // ExportBillAdjustmentItem 查询调账明细
