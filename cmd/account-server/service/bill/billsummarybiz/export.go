@@ -128,10 +128,11 @@ func (s *service) fetchBizSummary(cts *rest.Contexts, req *bill.BizSummaryExport
 			return nil, err
 		}
 	}
-	details, err := s.client.DataService().Global.Bill.ListBillSummaryBiz(cts.Kit, &core.ListReq{
+	listReq := &core.ListReq{
 		Filter: expression,
 		Page:   core.NewCountPage(),
-	})
+	}
+	details, err := s.client.DataService().Global.Bill.ListBillSummaryBiz(cts.Kit, listReq)
 	if err != nil {
 		return nil, err
 	}

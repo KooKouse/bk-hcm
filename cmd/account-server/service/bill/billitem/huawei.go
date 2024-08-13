@@ -50,10 +50,6 @@ var (
 		101: "调账-补偿税金",
 		102: "调账-扣费税金",
 	}
-
-	huaWeiExcelHeader = []string{"产品名称", "云服务区名称", "金额单位", "使用量类型", "使用量度量单位", "云服务类型编码",
-		"云服务类型名称", "资源类型编码", "资源类型名称", "计费模式", "账单类型", "套餐内使用量", "使用量", "预留实例使用量", "币种",
-		"汇率", "本期应付外币金额（元）", "本期应付人民币金额（元）"}
 )
 
 func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillItemReq,
@@ -72,7 +68,7 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 	}
 
 	data := make([][]string, 0, len(result)+1)
-	data = append(data, append(commonExcelHeader, huaWeiExcelHeader...))
+	data = append(data, getHuaweiHeader())
 	table, err := convertHuaweiBillItems(result, bizNameMap, mainAccountMap, rootAccountMap, rate)
 	if err != nil {
 		logs.Errorf("convert to raw data error: %s, rid: %s", err, kt.Rid)
@@ -91,6 +87,13 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 		return nil, err
 	}
 	return bill.BillExportResult{DownloadURL: url}, nil
+}
+
+func getHuaweiHeader() []string {
+	huaWeiExcelHeader := []string{"产品名称", "云服务区名称", "金额单位", "使用量类型", "使用量度量单位", "云服务类型编码",
+		"云服务类型名称", "资源类型编码", "资源类型名称", "计费模式", "账单类型", "套餐内使用量", "使用量", "预留实例使用量", "币种",
+		"汇率", "本期应付外币金额（元）", "本期应付人民币金额（元）"}
+	return append(commonGetHeader(), huaWeiExcelHeader...)
 }
 
 func convertHuaweiBillItems(items []*billapi.HuaweiBillItem, bizNameMap map[int64]string,

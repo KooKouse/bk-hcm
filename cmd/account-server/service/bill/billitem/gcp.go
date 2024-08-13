@@ -19,11 +19,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-var (
-	gcpExcelHeader = []string{"Region位置", "项目ID", "项目名称", "服务分类", "服务分类名称", "Sku名称", "外币类型",
-		"用量单位", "用量", "外币成本(元)", "汇率", "人民币成本(元)"}
-)
-
 func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemReq,
 	rate *decimal.Decimal) (any, error) {
 
@@ -52,7 +47,7 @@ func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 	}
 
 	data := make([][]string, 0, len(result)+1)
-	data = append(data, append(commonExcelHeader, gcpExcelHeader...))
+	data = append(data, getGcpHeader())
 	table, err := convertGcpBillItem(result, bizNameMap, mainAccountMap, rootAccountMap, regionMap, rate)
 	if err != nil {
 		logs.Errorf("convert to raw data error: %s, rid: %s", err, kt.Rid)
@@ -73,6 +68,12 @@ func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 	}
 
 	return bill.BillExportResult{DownloadURL: url}, nil
+}
+
+func getGcpHeader() []string {
+	gcpHeader := []string{"Region位置", "项目ID", "项目名称", "服务分类", "服务分类名称", "Sku名称", "外币类型",
+		"用量单位", "用量", "外币成本(元)", "汇率", "人民币成本(元)"}
+	return append(commonGetHeader(), gcpHeader...)
 }
 
 func convertGcpBillItem(items []*billapi.GcpBillItem, bizNameMap map[int64]string,

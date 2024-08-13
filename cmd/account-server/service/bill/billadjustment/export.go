@@ -243,10 +243,11 @@ func (b *billAdjustmentSvc) listMainAccount(kt *kit.Kit, ids []string) (map[stri
 		return nil, err
 	}
 
-	details, err := b.client.DataService().Global.MainAccount.List(kt, &core.ListReq{
+	listReq := &core.ListReq{
 		Filter: expression,
 		Page:   core.NewCountPage(),
-	})
+	}
+	details, err := b.client.DataService().Global.MainAccount.List(kt, listReq)
 	if err != nil {
 		return nil, err
 	}
@@ -254,13 +255,14 @@ func (b *billAdjustmentSvc) listMainAccount(kt *kit.Kit, ids []string) (map[stri
 
 	result := make(map[string]*accountset.BaseMainAccount, total)
 	for offset := uint64(0); offset < total; offset = offset + uint64(core.DefaultMaxPageLimit) {
-		tmpResult, err := b.client.DataService().Global.MainAccount.List(kt, &core.ListReq{
+		listReq := &core.ListReq{
 			Filter: expression,
 			Page: &core.BasePage{
 				Start: uint32(offset),
 				Limit: core.DefaultMaxPageLimit,
 			},
-		})
+		}
+		tmpResult, err := b.client.DataService().Global.MainAccount.List(kt, listReq)
 		if err != nil {
 			return nil, err
 		}

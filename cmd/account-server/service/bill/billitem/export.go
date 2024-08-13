@@ -51,8 +51,6 @@ const (
 )
 
 var (
-	commonExcelHeader = []string{"站点类型", "核算年月", "业务名称", "一级帐号名称", "二级帐号名称", "地域"}
-
 	azureExcelHeader = []string{"区域", "地区编码", "核算年月", "业务名称",
 		"账号邮箱", "子账号名称", "服务一级类别名称", "服务二级类别名称", "服务三级类别名称", "产品名称", "资源类别",
 		"计量地区", "资源地区编码", "单位", "用量", "折后税前成本（外币）", "币种", "汇率", "RMB成本（元）"}
@@ -99,18 +97,10 @@ func (b *billItemSvc) ExportBillItems(cts *rest.Contexts) (any, error) {
 	}
 }
 
-// Exporter 账单导出器
-type Exporter[T billapi.BillItemExtension] interface {
-	GetHeader() []string
-}
+type getHeader func() []string
 
-// CommonExporter 通用账单导出器
-type CommonExporter[T billapi.BillItemExtension] struct {
-}
-
-// GetHeader ...
-func (c *CommonExporter[T]) GetHeader() []string {
-	return commonExcelHeader
+func commonGetHeader() []string {
+	return []string{"站点类型", "核算年月", "业务名称", "一级帐号名称", "二级帐号名称", "地域"}
 }
 
 // fetchAccountBizInfo ...
@@ -140,7 +130,7 @@ func fetchAccountBizInfo[T billapi.BillItemExtension](kt *kit.Kit, b *billItemSv
 
 func (b *billItemSvc) getExchangeRate(kt *kit.Kit, year, month int) (*decimal.Decimal, error) {
 	// 获取汇率
-	result, err := b.client.DataService().Global.Bill.ListExchangeRate(kt, &core.ListReq{
+	listReq := &core.ListReq{
 		Filter: tools.ExpressionAnd(
 			tools.RuleEqual("from_currency", enumor.CurrencyUSD),
 			tools.RuleEqual("to_currency", enumor.CurrencyRMB),
@@ -151,7 +141,8 @@ func (b *billItemSvc) getExchangeRate(kt *kit.Kit, year, month int) (*decimal.De
 			Start: 0,
 			Limit: 1,
 		},
-	})
+	}
+	result, err := b.client.DataService().Global.Bill.ListExchangeRate(kt, listReq)
 	if err != nil {
 		return nil, fmt.Errorf("get exchange rate from %s to %s in %d-%d failed, err %s",
 			enumor.CurrencyUSD, enumor.CurrencyRMB, year, month, err.Error())

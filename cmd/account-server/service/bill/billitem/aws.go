@@ -16,12 +16,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-var (
-	awsExcelHeader = []string{"地区名称", "发票ID", "账单实体", "产品代号", "服务组", "产品名称", "API操作", "产品规格",
-		"实例类型", "资源ID", "计费方式", "计费类型", "计费说明", "用量", "单位", "折扣前成本（外币）", "外币种类",
-		"人民币成本（元）", "汇率"}
-)
-
 func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemReq,
 	rate *decimal.Decimal) (any, error) {
 
@@ -38,7 +32,7 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 	}
 
 	data := make([][]string, 0, len(result)+1)
-	data = append(data, append(commonExcelHeader, awsExcelHeader...))
+	data = append(data, getAwsHeader())
 	table, err := convertAwsBillItems(result, bizNameMap, mainAccountMap, rootAccountMap, rate)
 	if err != nil {
 		logs.Errorf("convert to raw data error: %s, rid: %s", err, kt.Rid)
@@ -58,6 +52,13 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 	}
 
 	return bill.BillExportResult{DownloadURL: url}, nil
+}
+
+func getAwsHeader() []string {
+	awsHeader := []string{"地区名称", "发票ID", "账单实体", "产品代号", "服务组", "产品名称", "API操作", "产品规格",
+		"实例类型", "资源ID", "计费方式", "计费类型", "计费说明", "用量", "单位", "折扣前成本（外币）", "外币种类",
+		"人民币成本（元）", "汇率"}
+	return append(commonGetHeader(), awsHeader...)
 }
 
 func convertAwsBillItems(items []*billapi.AwsBillItem, bizNameMap map[int64]string,
