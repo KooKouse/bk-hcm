@@ -320,6 +320,10 @@ func (gt GreaterThanOp) Name() OpType {
 
 // ValidateValue validate greater than value
 func (gt GreaterThanOp) ValidateValue(v interface{}, opt *ExprOption) error {
+	valOf := reflect.ValueOf(v)
+	if valOf.Type().Kind() == reflect.String {
+		return nil
+	}
 	if _, hit := isNumericOrTime(v); !hit {
 		return errors.New("invalid gt operator's value, should be a numeric or time format string value")
 	}
@@ -354,10 +358,6 @@ func (gte GreaterThanEqualOp) Name() OpType {
 
 // ValidateValue validate greater than value
 func (gte GreaterThanEqualOp) ValidateValue(v interface{}, opt *ExprOption) error {
-	valOf := reflect.ValueOf(v)
-	if valOf.Type().Kind() == reflect.String {
-		return nil
-	}
 	if _, hit := isNumericOrTime(v); !hit {
 		return errors.New("invalid gte operator's value, should be a numeric or time format string value")
 	}

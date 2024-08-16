@@ -44,11 +44,6 @@ const (
 	defaultExportFilename = "bill_summary_main"
 )
 
-func getHeader() []string {
-	return []string{"二级账号ID", "二级账号名称", "一级账号ID", "一级账号名称", "业务",
-		"已确认账单人民币（元）", "已确认账单美金（美元）", "当前账单人民币（元）", "当前账单美金（美元）"}
-}
-
 // ExportMainAccountSummary export main account summary with options
 func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, error) {
 	req := new(asbillapi.MainAccountSummaryExportReq)
@@ -100,8 +95,8 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 	}
 
 	data := make([][]string, 0, len(result)+1)
-	data = append(data, getHeader())
-	table, err := toRawData(result, mainAccountMap, rootAccountMap, bizMap)
+	data = append(data, export.BillSummaryMainTableHeader)
+	table, err := toRawData(cts.Kit, result, mainAccountMap, rootAccountMap, bizMap)
 	if err != nil {
 		logs.Errorf("convert to raw data error: %s, rid: %s", err, cts.Kit.Rid)
 		return nil, err
@@ -191,7 +186,7 @@ func (s *service) fetchMainAccountSummary(cts *rest.Contexts, req *asbillapi.Mai
 	return result, nil
 }
 
-func toRawData(details []*dsbillapi.BillSummaryMainResult, mainAccountMap map[string]*accountset.BaseMainAccount,
+func toRawData(kt *kit.Kit, details []*dsbillapi.BillSummaryMainResult, mainAccountMap map[string]*accountset.BaseMainAccount,
 	rootAccountMap map[string]*accountset.BaseRootAccount, bizMap map[int64]string) ([][]string, error) {
 
 	data := make([][]string, 0, len(details))
@@ -206,19 +201,23 @@ func toRawData(details []*dsbillapi.BillSummaryMainResult, mainAccountMap map[st
 			return nil, fmt.Errorf("root account(%s) not found", detail.RootAccountID)
 		}
 		bizName := bizMap[detail.BkBizID]
-		tmp := []string{
-			mainAccount.CloudID,
-			mainAccount.Name,
-			rootAccount.CloudID,
-			rootAccount.Name,
-			bizName,
-			detail.CurrentMonthRMBCostSynced.String(),
-			detail.CurrentMonthCostSynced.String(),
-			detail.CurrentMonthRMBCost.String(),
-			detail.CurrentMonthCost.String(),
+		table := export.BillSummaryMainTable{
+			MainAccountID:             mainAccount.CloudID,
+			MainAccountName:           mainAccount.Name,
+			RootAccountID:             rootAccount.CloudID,
+			RootAccountName:           rootAccount.Name,
+			BKBizName:                 bizName,
+			CurrentMonthRMBCostSynced: detail.CurrentMonthRMBCostSynced.String(),
+			CurrentMonthCostSynced:    detail.CurrentMonthCostSynced.String(),
+			CurrentMonthRMBCost:       detail.CurrentMonthRMBCost.String(),
+			CurrentMonthCost:          detail.CurrentMonthCost.String(),
 		}
-
-		data = append(data, tmp)
+		fields, err := table.GetHeaderFields()
+		if err != nil {
+			logs.Errorf("get header fields failed: %v, rid: %s", err, kt.Rid)
+			return nil, err
+		}
+		data = append(data, fields)
 	}
 	return data, nil
 }

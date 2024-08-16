@@ -47,12 +47,6 @@ const (
 	defaultExportFilename = "bill_summary_root"
 )
 
-func getHeader() []string {
-	return []string{"一级账号ID", "一级账号名称", "账号状态", "账单同步（人民币-元）当月", "账单同步（人民币-元）上月",
-		"账单同步（美金-美元）当月", "账单同步（美金-美元）上月", "账单同步环比", "当前账单人民币（元）", "当前账单美金（美元）",
-		"调账人民币（元）", "调账美金（美元）"}
-}
-
 // ExportRootAccountSummary export root account summary with options
 func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, error) {
 	req := new(asbillapi.RootAccountSummaryExportReq)
@@ -86,8 +80,8 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 	}
 
 	data := make([][]string, 0, len(result)+1)
-	data = append(data, getHeader())
-	table, err := toRawData(result, rootAccountMap)
+	data = append(data, export.BillSummaryRootTableHeader)
+	table, err := toRawData(cts.Kit, result, rootAccountMap)
 	if err != nil {
 		logs.Errorf("convert to raw data failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
@@ -171,30 +165,33 @@ func (s *service) fetchRootAccountSummary(cts *rest.Contexts, req *asbillapi.Roo
 	return result, nil
 }
 
-func toRawData(details []*dsbillapi.BillSummaryRootResult, accountMap map[string]*accountset.BaseRootAccount) (
-	[][]string, error) {
+func toRawData(kt *kit.Kit, details []*dsbillapi.BillSummaryRootResult, accountMap map[string]*accountset.BaseRootAccount) ([][]string, error) {
 	data := make([][]string, 0, len(details))
 	for _, detail := range details {
 		rootAccount, ok := accountMap[detail.RootAccountID]
 		if !ok {
 			return nil, fmt.Errorf("root account not found, id: %s", detail.RootAccountID)
 		}
-		tmp := []string{
-			rootAccount.CloudID,
-			rootAccount.Name,
-			enumor.RootAccountBillSummaryStateMap[detail.State],
-			detail.CurrentMonthRMBCostSynced.String(),
-			detail.LastMonthRMBCostSynced.String(),
-			detail.CurrentMonthCostSynced.String(),
-			detail.LastMonthCostSynced.String(),
-			conv.ToString(detail.MonthOnMonthValue),
-			detail.CurrentMonthRMBCost.String(),
-			detail.CurrentMonthCost.String(),
-			detail.AdjustmentRMBCost.String(),
-			detail.AdjustmentCost.String(),
+		table := export.BillSummaryRootTable{
+			RootAccountID:             rootAccount.CloudID,
+			RootAccountName:           rootAccount.Name,
+			State:                     enumor.RootAccountBillSummaryStateMap[detail.State],
+			CurrentMonthRMBCostSynced: detail.CurrentMonthRMBCostSynced.String(),
+			LastMonthRMBCostSynced:    detail.LastMonthRMBCostSynced.String(),
+			CurrentMonthCostSynced:    detail.CurrentMonthCostSynced.String(),
+			LastMonthCostSynced:       detail.LastMonthCostSynced.String(),
+			MonthOnMonthValue:         conv.ToString(detail.MonthOnMonthValue),
+			CurrentMonthRMB:           detail.CurrentMonthRMBCost.String(),
+			CurrentMonthCost:          detail.CurrentMonthCost.String(),
+			AdjustRMBCost:             detail.AdjustmentRMBCost.String(),
+			AdjustCost:                detail.AdjustmentCost.String(),
 		}
-
-		data = append(data, tmp)
+		fields, err := table.GetHeaderFields()
+		if err != nil {
+			logs.Errorf("get header fields failed: %v, rid: %s", err, kt.Rid)
+			return nil, err
+		}
+		data = append(data, fields)
 	}
 	return data, nil
 }

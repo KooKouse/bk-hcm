@@ -29,11 +29,6 @@ const (
 	defaultExportFilename = "bill_adjustment_item"
 )
 
-func getHeader() []string {
-	return []string{"更新时间", "调账ID", "业务", "二级账号名称", "调账类型",
-		"操作人", "金额", "币种", "调账状态"}
-}
-
 // ExportBillAdjustmentItem 查询调账明细
 func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, error) {
 
@@ -78,8 +73,8 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 	}
 
 	data := make([][]string, 0, len(result)+1)
-	data = append(data, getHeader())
-	table, err := toRawData(result, mainAccountMap, bizMap)
+	data = append(data, export.BillAdjustmentTableHeader)
+	table, err := toRawData(cts.Kit, result, mainAccountMap, bizMap)
 	if err != nil {
 		logs.Errorf("convert to raw data error: %s, rid: %s", err, cts.Kit.Rid)
 		return nil, err
@@ -173,7 +168,7 @@ func (b *billAdjustmentSvc) fetchBillAdjustmentItemCount(kt *kit.Kit,
 	return details.Count, nil
 }
 
-func toRawData(details []*billcore.AdjustmentItem, mainAccountMap map[string]*accountset.BaseMainAccount,
+func toRawData(kt *kit.Kit, details []*billcore.AdjustmentItem, mainAccountMap map[string]*accountset.BaseMainAccount,
 	bizMap map[int64]string) ([][]string, error) {
 
 	data := make([][]string, 0, len(details))
@@ -184,19 +179,23 @@ func toRawData(details []*billcore.AdjustmentItem, mainAccountMap map[string]*ac
 			return nil, fmt.Errorf("main account(%s) not found", detail.MainAccountID)
 		}
 
-		tmp := []string{
-			detail.UpdatedAt,
-			detail.ID,
-			bizName,
-			mainAccount.Name,
-			enumor.BillAdjustmentTypeNameMap[detail.Type],
-			detail.Operator,
-			detail.Cost.String(),
-			detail.Currency,
-			enumor.BillAdjustmentStateNameMap[detail.State],
+		table := export.BillAdjustmentTable{
+			UpdateTime:      detail.UpdatedAt,
+			BillID:          detail.ID,
+			BKBizName:       bizName,
+			MainAccountName: mainAccount.Name,
+			AdjustType:      enumor.BillAdjustmentTypeNameMap[detail.Type],
+			Operator:        detail.Operator,
+			Cost:            detail.Cost.String(),
+			Currency:        detail.Currency,
+			AdjustStatus:    enumor.BillAdjustmentStateNameMap[detail.State],
 		}
-
-		data = append(data, tmp)
+		fields, err := table.GetHeaderFields()
+		if err != nil {
+			logs.Errorf("get header fields failed: %v, rid: %s", err, kt.Rid)
+			return nil, err
+		}
+		data = append(data, fields)
 	}
 	return data, nil
 }

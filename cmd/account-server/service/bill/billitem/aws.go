@@ -46,7 +46,7 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 	}
 
 	buff, writer := export.NewCsvWriter()
-	if err = writer.Write(getAwsHeader()); err != nil {
+	if err = writer.Write(export.AwsBillItemHeaders); err != nil {
 		logs.Errorf("csv write header failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 		if len(items) == 0 {
 			return nil
 		}
-		table, err := convertAwsBillItems(items, bizNameMap, mainAccountMap, rootAccountMap, rate)
+		table, err := convertAwsBillItems(kt, items, bizNameMap, mainAccountMap, rootAccountMap, rate)
 		if err != nil {
 			logs.Errorf("convert to raw data error: %s, rid: %s", err, kt.Rid)
 			return err
@@ -82,14 +82,7 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 	return bill.BillExportResult{DownloadURL: url}, nil
 }
 
-func getAwsHeader() []string {
-	awsHeader := []string{"地区名称", "发票ID", "账单实体", "产品代号", "服务组", "产品名称", "API操作", "产品规格",
-		"实例类型", "资源ID", "计费方式", "计费类型", "计费说明", "用量", "单位", "折扣前成本（外币）", "外币种类",
-		"人民币成本（元）", "汇率"}
-	return append(commonGetHeader(), awsHeader...)
-}
-
-func convertAwsBillItems(items []*billapi.AwsBillItem, bizNameMap map[int64]string,
+func convertAwsBillItems(kt *kit.Kit, items []*billapi.AwsBillItem, bizNameMap map[int64]string,
 	mainAccountMap map[string]*protocore.BaseMainAccount, rootAccountMap map[string]*protocore.BaseRootAccount,
 	rate *decimal.Decimal) ([][]string, error) {
 
@@ -113,34 +106,39 @@ func convertAwsBillItems(items []*billapi.AwsBillItem, bizNameMap map[int64]stri
 			extension = &billapi.AwsRawBillItem{}
 		}
 
-		tmp := []string{
-			string(mainAccount.Site),
-			fmt.Sprintf("%d-%02d", item.BillYear, item.BillMonth),
-			bizName,
-			rootAccount.Name,
-			mainAccount.Name,
-			extension.ProductToRegionCode,
-			extension.ProductFromLocation,
-			extension.BillInvoiceId,
-			extension.BillBillingEntity,
-			extension.LineItemProductCode,
-			extension.ProductProductFamily,
-			extension.ProductProductName,
-			extension.LineItemOperation, // line_item_operation
-			extension.ProductUsagetype,
-			extension.ProductInsightstype,
-			extension.LineItemResourceId,
-			extension.PricingTerm,
-			extension.LineItemLineItemType,
-			extension.LineItemLineItemDescription,
-			extension.LineItemUsageAmount,
-			extension.PricingUnit,
-			item.Cost.String(),
-			string(item.Currency),
-			item.Cost.Mul(*rate).String(),
-			rate.String(),
+		table := &export.AwsBillItemTable{
+			Site:                string(mainAccount.Site),
+			AccountDate:         fmt.Sprintf("%d-%02d", item.BillYear, item.BillMonth),
+			BizName:             bizName,
+			RootAccountName:     rootAccount.Name,
+			MainAccountName:     mainAccount.Name,
+			Region:              extension.ProductToRegionCode,
+			LocationName:        extension.ProductFromLocation,
+			BillInvoiceIC:       extension.BillInvoiceId,
+			BillEntity:          extension.BillBillingEntity,
+			ProductCode:         extension.LineItemProductCode,
+			ProductFamily:       extension.ProductProductFamily,
+			ProductName:         extension.ProductProductName,
+			ApiOperation:        extension.LineItemOperation, // line_item_operation
+			ProductUsageType:    extension.ProductUsagetype,
+			InstanceType:        extension.ProductInsightstype,
+			ResourceId:          extension.LineItemResourceId,
+			PricingTerm:         extension.PricingTerm,
+			LineItemType:        extension.LineItemLineItemType,
+			LineItemDescription: extension.LineItemLineItemDescription,
+			UsageAmount:         extension.LineItemUsageAmount,
+			PricingUnit:         extension.PricingUnit,
+			Cost:                item.Cost.String(),
+			Currency:            string(item.Currency),
+			RMBCost:             item.Cost.Mul(*rate).String(),
+			Rate:                rate.String(),
 		}
-		result = append(result, tmp)
+		fields, err := table.GetHeaderFields()
+		if err != nil {
+			logs.Errorf("get header fields failed: %v, rid: %s", err, kt.Rid)
+			return nil, err
+		}
+		result = append(result, fields)
 	}
 	return result, nil
 }

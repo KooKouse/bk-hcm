@@ -52,7 +52,7 @@ func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 	}
 
 	buff, writer := export.NewCsvWriter()
-	if err = writer.Write(getGcpHeader()); err != nil {
+	if err = writer.Write(export.GcpBillItemHeaders); err != nil {
 		logs.Errorf("csv write header failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 		if len(items) == 0 {
 			return nil
 		}
-		table, err := convertGcpBillItem(items, bizNameMap, mainAccountMap, rootAccountMap, regionMap, rate)
+		table, err := convertGcpBillItem(kt, items, bizNameMap, mainAccountMap, rootAccountMap, regionMap, rate)
 		if err != nil {
 			logs.Errorf("convert to raw data error: %s, rid: %s", err, kt.Rid)
 			return err
@@ -87,13 +87,7 @@ func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 	return bill.BillExportResult{DownloadURL: url}, nil
 }
 
-func getGcpHeader() []string {
-	gcpHeader := []string{"Region位置", "项目ID", "项目名称", "服务分类", "服务分类名称", "Sku名称", "外币类型",
-		"用量单位", "用量", "外币成本(元)", "汇率", "人民币成本(元)"}
-	return append(commonGetHeader(), gcpHeader...)
-}
-
-func convertGcpBillItem(items []*billapi.GcpBillItem, bizNameMap map[int64]string,
+func convertGcpBillItem(kt *kit.Kit, items []*billapi.GcpBillItem, bizNameMap map[int64]string,
 	mainAccountMap map[string]*protocore.BaseMainAccount, rootAccountMap map[string]*protocore.BaseRootAccount,
 	regionMap map[string]string, rate *decimal.Decimal) ([][]string, error) {
 
@@ -116,28 +110,33 @@ func convertGcpBillItem(items []*billapi.GcpBillItem, bizNameMap map[int64]strin
 			extension = &billapi.GcpRawBillItem{}
 		}
 
-		tmp := []string{
-			string(mainAccount.Site),
-			converter.PtrToVal[string](extension.Month),
-			bizName,
-			rootAccount.Name,
-			mainAccount.Name,
-			converter.PtrToVal[string](item.Extension.GcpRawBillItem.Region),
-			regionMap[converter.PtrToVal[string](extension.Region)],
-			converter.PtrToVal[string](item.Extension.GcpRawBillItem.ProjectID),
-			converter.PtrToVal[string](extension.ProjectName),
-			converter.PtrToVal[string](extension.ServiceDescription), // 服务分类
-			converter.PtrToVal[string](extension.ServiceDescription), // 服务分类名称
-			converter.PtrToVal[string](extension.SkuDescription),
-			string(item.Currency),
-			converter.PtrToVal[string](extension.UsageUnit),
-			(converter.PtrToVal[decimal.Decimal](extension.UsageAmount)).String(),
-			item.Cost.String(),
-			rate.String(),
-			item.Cost.Mul(*rate).String(),
+		tmp := export.GcpBillItemTable{
+			Site:                       string(mainAccount.Site),
+			AccountDate:                converter.PtrToVal[string](extension.Month),
+			BizName:                    bizName,
+			RootAccountName:            rootAccount.Name,
+			MainAccountName:            mainAccount.Name,
+			Region:                     converter.PtrToVal[string](item.Extension.GcpRawBillItem.Region),
+			RegionName:                 regionMap[converter.PtrToVal[string](extension.Region)],
+			ProjectID:                  converter.PtrToVal[string](item.Extension.GcpRawBillItem.ProjectID),
+			ProjectName:                converter.PtrToVal[string](extension.ProjectName),
+			ServiceCategory:            converter.PtrToVal[string](extension.ServiceDescription), // 服务分类
+			ServiceCategoryDescription: converter.PtrToVal[string](extension.ServiceDescription), // 服务分类名称
+			SkuDescription:             converter.PtrToVal[string](extension.SkuDescription),
+			Currency:                   string(item.Currency),
+			UsageUnit:                  converter.PtrToVal[string](extension.UsageUnit),
+			UsageAmount:                (converter.PtrToVal[decimal.Decimal](extension.UsageAmount)).String(),
+			Cost:                       item.Cost.String(),
+			ExchangeRate:               rate.String(),
+			RMBCost:                    item.Cost.Mul(*rate).String(),
 		}
 
-		result = append(result, tmp)
+		fields, err := tmp.GetHeaderFields()
+		if err != nil {
+			logs.Errorf("get header fields failed: %v, rid: %s", err, kt.Rid)
+			return nil, err
+		}
+		result = append(result, fields)
 	}
 	return result, nil
 }

@@ -40,12 +40,12 @@ import (
 )
 
 var (
-	// 金额单位。 1：元
+	// 金额单位
 	huaWeiMeasureIdMap = map[int32]string{
 		1: "元",
 	}
 
-	// 计费模式。 1：包年/包月3：按需10：预留实例
+	// 计费模式
 	huaWeiChargeModeMap = map[string]string{
 		"1":  "包年/包月",
 		"3":  "按需",
@@ -82,7 +82,7 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 	}
 
 	buff, writer := export.NewCsvWriter()
-	if err = writer.Write(getHuaweiHeader()); err != nil {
+	if err = writer.Write(export.HuaweiBillItemHeaders); err != nil {
 		logs.Errorf("csv write header failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 		if len(items) == 0 {
 			return nil
 		}
-		table, err := convertHuaweiBillItems(items, bizNameMap, mainAccountMap, rootAccountMap, rate)
+		table, err := convertHuaweiBillItems(kt, items, bizNameMap, mainAccountMap, rootAccountMap, rate)
 		if err != nil {
 			logs.Errorf("convert to raw data error: %s, rid: %s", err, kt.Rid)
 			return err
@@ -117,14 +117,7 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 	return bill.BillExportResult{DownloadURL: url}, nil
 }
 
-func getHuaweiHeader() []string {
-	huaWeiExcelHeader := []string{"产品名称", "云服务区名称", "金额单位", "使用量类型", "使用量度量单位", "云服务类型编码",
-		"云服务类型名称", "资源类型编码", "资源类型名称", "计费模式", "账单类型", "套餐内使用量", "使用量", "预留实例使用量", "币种",
-		"汇率", "本期应付外币金额（元）", "本期应付人民币金额（元）"}
-	return append(commonGetHeader(), huaWeiExcelHeader...)
-}
-
-func convertHuaweiBillItems(items []*billapi.HuaweiBillItem, bizNameMap map[int64]string,
+func convertHuaweiBillItems(kt *kit.Kit, items []*billapi.HuaweiBillItem, bizNameMap map[int64]string,
 	mainAccountMap map[string]*protocore.BaseMainAccount, rootAccountMap map[string]*protocore.BaseRootAccount,
 	rate *decimal.Decimal) ([][]string, error) {
 
@@ -148,33 +141,38 @@ func convertHuaweiBillItems(items []*billapi.HuaweiBillItem, bizNameMap map[int6
 			extension = &model.ResFeeRecordV2{}
 		}
 
-		var tmp = []string{
-			string(mainAccount.Site),
-			fmt.Sprintf("%d%02d", item.BillYear, item.BillMonth),
-			bizName,
-			rootAccount.Name,
-			mainAccount.Name,
-			converter.PtrToVal[string](extension.RegionName),
-			converter.PtrToVal[string](extension.ProductName),
-			converter.PtrToVal[string](extension.Region),
-			huaWeiMeasureIdMap[converter.PtrToVal[int32](extension.MeasureId)], // 金额单位。 1：元
-			converter.PtrToVal[string](extension.UsageType),
-			conv.ToString(converter.PtrToVal[int32](extension.UsageMeasureId)),
-			converter.PtrToVal[string](extension.CloudServiceType),
-			converter.PtrToVal[string](extension.CloudServiceTypeName),
-			converter.PtrToVal[string](extension.ResourceType),
-			converter.PtrToVal[string](extension.ResourceTypeName),
-			huaWeiChargeModeMap[converter.PtrToVal[string](extension.ChargeMode)],
-			huaWeiBillTypeMap[converter.PtrToVal[int32](extension.BillType)],
-			conv.ToString(converter.PtrToVal[float64](extension.FreeResourceUsage)),
-			conv.ToString(converter.PtrToVal[float64](extension.Usage)),
-			conv.ToString(converter.PtrToVal[float64](extension.RiUsage)),
-			string(item.Currency),
-			rate.String(),
-			item.Cost.String(),
-			item.Cost.Mul(*rate).String(),
+		var tmp = export.HuaweiBillItemTable{
+			Site:                 string(mainAccount.Site),
+			AccountDate:          fmt.Sprintf("%d%02d", item.BillYear, item.BillMonth),
+			BizName:              bizName,
+			RootAccountName:      rootAccount.Name,
+			MainAccountName:      mainAccount.Name,
+			Region:               converter.PtrToVal[string](extension.RegionName),
+			ProductName:          converter.PtrToVal[string](extension.ProductName),
+			RegionName:           converter.PtrToVal[string](extension.Region),
+			MeasureID:            huaWeiMeasureIdMap[converter.PtrToVal[int32](extension.MeasureId)], // 金额单位。 1：元
+			UsageType:            converter.PtrToVal[string](extension.UsageType),
+			UsageMeasureID:       conv.ToString(converter.PtrToVal[int32](extension.UsageMeasureId)),
+			CloudServiceType:     converter.PtrToVal[string](extension.CloudServiceType),
+			CloudServiceTypeName: converter.PtrToVal[string](extension.CloudServiceTypeName),
+			ResourceType:         converter.PtrToVal[string](extension.ResourceType),
+			ResourceTypeName:     converter.PtrToVal[string](extension.ResourceTypeName),
+			ChargeMode:           huaWeiChargeModeMap[converter.PtrToVal[string](extension.ChargeMode)],
+			BillType:             huaWeiBillTypeMap[converter.PtrToVal[int32](extension.BillType)],
+			FreeResourceUsage:    conv.ToString(converter.PtrToVal[float64](extension.FreeResourceUsage)),
+			Usage:                conv.ToString(converter.PtrToVal[float64](extension.Usage)),
+			RiUsage:              conv.ToString(converter.PtrToVal[float64](extension.RiUsage)),
+			Currency:             string(item.Currency),
+			ExchangeRate:         rate.String(),
+			Cost:                 item.Cost.String(),
+			CostRMB:              item.Cost.Mul(*rate).String(),
 		}
-		result = append(result, tmp)
+		fields, err := tmp.GetHeaderFields()
+		if err != nil {
+			logs.Errorf("get header fields failed: %v, rid: %s", err, kt.Rid)
+			return nil, err
+		}
+		result = append(result, fields)
 	}
 	return result, nil
 }

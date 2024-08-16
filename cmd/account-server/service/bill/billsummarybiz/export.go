@@ -26,11 +26,6 @@ const (
 	defaultExportFilename = "bill_summary_biz"
 )
 
-func getHeader() []string {
-	return []string{"运营产品ID", "运营产品名称", "已确认账单人民币（元）", "已确认账单美金（美元）",
-		"当前账单人民币（元）", "当前账单美金（美元）"}
-}
-
 // ExportBizSummary export biz summary with options
 func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 	req := new(bill.BizSummaryExportReq)
@@ -64,8 +59,13 @@ func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 	}
 
 	data := make([][]string, 0, len(result)+1)
-	data = append(data, getHeader())
-	data = append(data, toRawData(result, bizMap)...)
+	data = append(data, export.BillSummaryBizTableHeader)
+	table, err := toRawData(cts.Kit, result, bizMap)
+	if err != nil {
+		logs.Errorf("convert to raw data failed: %v, rid: %s", err, cts.Kit.Rid)
+		return nil, err
+	}
+	data = append(data, table...)
 	buf, err := export.GenerateCSV(data)
 	if err != nil {
 		logs.Errorf("generate csv failed: %v, data: %v, rid: %s", err, data, cts.Kit.Rid)
@@ -98,20 +98,25 @@ func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 	return bill.BillExportResult{DownloadURL: url.URL}, nil
 }
 
-func toRawData(details []*billproto.BillSummaryBizResult, bizMap map[int64]string) [][]string {
+func toRawData(kt *kit.Kit, details []*billproto.BillSummaryBizResult, bizMap map[int64]string) ([][]string, error) {
 	result := make([][]string, 0, len(details))
 	for _, detail := range details {
-		row := []string{
-			conv.ToString(detail.BkBizID),
-			bizMap[detail.BkBizID],
-			detail.CurrentMonthRMBCostSynced.String(),
-			detail.CurrentMonthCostSynced.String(),
-			detail.CurrentMonthRMBCost.String(),
-			detail.CurrentMonthCost.String(),
+		table := export.BillSummaryBizTable{
+			BkBizID:                   conv.ToString(detail.BkBizID),
+			BkBizName:                 bizMap[detail.BkBizID],
+			CurrentMonthRMBCostSynced: detail.CurrentMonthRMBCostSynced.String(),
+			CurrentMonthCostSynced:    detail.CurrentMonthCostSynced.String(),
+			CurrentMonthRMBCost:       detail.CurrentMonthRMBCost.String(),
+			CurrentMonthCost:          detail.CurrentMonthCost.String(),
 		}
-		result = append(result, row)
+		fields, err := table.GetHeaderFields()
+		if err != nil {
+			logs.Errorf("get header fields failed: %v, rid: %s", err, kt.Rid)
+			return nil, err
+		}
+		result = append(result, fields)
 	}
-	return result
+	return result, nil
 }
 
 func (s *service) fetchBizSummary(cts *rest.Contexts, req *bill.BizSummaryExportReq) (
