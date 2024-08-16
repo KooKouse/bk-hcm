@@ -98,7 +98,7 @@ func convertAwsBillItems(kt *kit.Kit, items []*billapi.AwsBillItem, bizNameMap m
 		}
 		bizName, ok := bizNameMap[item.BkBizID]
 		if !ok {
-			return nil, fmt.Errorf("bizID(%d) not found", item.BkBizID)
+			return nil, fmt.Errorf("productID(%d) not found", item.ProductID)
 		}
 
 		extension := item.Extension.AwsRawBillItem
@@ -177,7 +177,7 @@ func (b *billItemSvc) fetchAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemReq
 			ListReq: &core.ListReq{
 				Filter: expr,
 				Page: &core.BasePage{
-					Start: uint32(offset),
+					Start: 0,
 					Limit: min(uint(left), core.DefaultMaxPageLimit),
 					Sort:  "id",
 					Order: core.Ascending,

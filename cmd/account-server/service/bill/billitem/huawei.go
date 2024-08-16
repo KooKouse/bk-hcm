@@ -208,7 +208,7 @@ func (b *billItemSvc) fetchHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillItem
 			ListReq: &core.ListReq{
 				Filter: expr,
 				Page: &core.BasePage{
-					Start: uint32(offset),
+					Start: 0,
 					Limit: min(uint(left), core.DefaultMaxPageLimit),
 					Sort:  "id",
 					Order: core.Ascending,
