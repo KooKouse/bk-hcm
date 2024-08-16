@@ -188,7 +188,7 @@ func toRawData(details []*billcore.AdjustmentItem, mainAccountMap map[string]*ac
 			detail.UpdatedAt,
 			detail.ID,
 			bizName,
-			mainAccount.ID,
+			mainAccount.Name,
 			enumor.BillAdjustmentTypeNameMap[detail.Type],
 			detail.Operator,
 			detail.Cost.String(),

@@ -1,3 +1,22 @@
+/*
+ * TencentBlueKing is pleased to support the open source community by making
+ * 蓝鲸智云 - 混合云管理平台 (BlueKing - Hybrid Cloud Management System) available.
+ * Copyright (C) 2022 THL A29 Limited,
+ * a Tencent company. All rights reserved.
+ * Licensed under the MIT License (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at http://opensource.org/licenses/MIT
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ *
+ * We undertake not to change the open source license (MIT license) applicable
+ *
+ * to the current version of the project delivered to anyone in the future.
+ */
+
 package billitem
 
 import (
@@ -14,7 +33,6 @@ import (
 	"hcm/pkg/kit"
 	"hcm/pkg/logs"
 	"hcm/pkg/tools/converter"
-	"hcm/pkg/tools/slice"
 
 	"github.com/shopspring/decimal"
 )
@@ -22,46 +40,45 @@ import (
 func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemReq,
 	rate *decimal.Decimal) (any, error) {
 
-	result, err := fetchGcpBillItems(kt, b, req)
+	rootAccountMap, mainAccountMap, bizNameMap, err := b.fetchAccountBizInfo(kt, enumor.Gcp)
 	if err != nil {
+		logs.Errorf("prepare related data failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
-
-	regionIDMap := make(map[string]struct{})
-	for _, item := range result {
-		if item.Extension.GcpRawBillItem != nil {
-			regionIDMap[*item.Extension.Region] = struct{}{}
-		}
-	}
-	regionIDs := converter.MapKeyToSlice(regionIDMap)
-	regionMap, err := b.listGcpRegions(kt, regionIDs)
+	regionMap, err := b.listGcpRegions(kt)
 	if err != nil {
 		logs.Errorf("list gcp regions failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
 
-	rootAccountMap, mainAccountMap, bizNameMap, err := fetchAccountBizInfo(kt, b, result)
-	if err != nil {
-		logs.Errorf("fetch account biz info failed: %v, rid: %s", err, kt.Rid)
+	buff, writer := export.NewCsvWriter()
+	if err = writer.Write(getGcpHeader()); err != nil {
+		logs.Errorf("csv write header failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
 
-	data := make([][]string, 0, len(result)+1)
-	data = append(data, getGcpHeader())
-	table, err := convertGcpBillItem(result, bizNameMap, mainAccountMap, rootAccountMap, regionMap, rate)
+	convFunc := func(items []*billapi.GcpBillItem) error {
+		if len(items) == 0 {
+			return nil
+		}
+		table, err := convertGcpBillItem(items, bizNameMap, mainAccountMap, rootAccountMap, regionMap, rate)
+		if err != nil {
+			logs.Errorf("convert to raw data error: %s, rid: %s", err, kt.Rid)
+			return err
+		}
+		err = writer.WriteAll(table)
+		if err != nil {
+			logs.Errorf("csv write data failed: %v, rid: %s", err, kt.Rid)
+			return err
+		}
+		return nil
+	}
+	err = b.fetchGcpBillItems(kt, req, convFunc)
 	if err != nil {
-		logs.Errorf("convert to raw data error: %s, rid: %s", err, kt.Rid)
 		return nil, err
 	}
-	data = append(data, table...)
 
-	buf, err := export.GenerateCSV(data)
-	if err != nil {
-		logs.Errorf("generate csv failed: %v, data: %v, rid: %s", err, data, kt.Rid)
-		return nil, err
-	}
-
-	url, err := b.uploadFileAndReturnUrl(kt, buf)
+	url, err := b.uploadFileAndReturnUrl(kt, buff)
 	if err != nil {
 		logs.Errorf("upload file failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
@@ -90,6 +107,10 @@ func convertGcpBillItem(items []*billapi.GcpBillItem, bizNameMap map[int64]strin
 		if !ok {
 			return nil, fmt.Errorf("root account(%s) not found", item.RootAccountID)
 		}
+		bizName, ok := bizNameMap[item.BkBizID]
+		if !ok {
+			return nil, fmt.Errorf("bizID(%d) not found", item.BkBizID)
+		}
 		extension := item.Extension.GcpRawBillItem
 		if extension == nil {
 			extension = &billapi.GcpRawBillItem{}
@@ -98,9 +119,9 @@ func convertGcpBillItem(items []*billapi.GcpBillItem, bizNameMap map[int64]strin
 		tmp := []string{
 			string(mainAccount.Site),
 			converter.PtrToVal[string](extension.Month),
-			bizNameMap[item.BkBizID],
-			rootAccount.ID,
-			mainAccount.ID,
+			bizName,
+			rootAccount.Name,
+			mainAccount.Name,
 			converter.PtrToVal[string](item.Extension.GcpRawBillItem.Region),
 			regionMap[converter.PtrToVal[string](extension.Region)],
 			converter.PtrToVal[string](item.Extension.GcpRawBillItem.ProjectID),
@@ -121,12 +142,13 @@ func convertGcpBillItem(items []*billapi.GcpBillItem, bizNameMap map[int64]strin
 	return result, nil
 }
 
-func fetchGcpBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq) ([]*billapi.GcpBillItem, error) {
+func (b *billItemSvc) fetchGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemReq,
+	convertFunc func([]*billapi.GcpBillItem) error) error {
 
-	totalCount, err := fetchGcpBillItemCount(kt, b, req)
+	totalCount, err := b.fetchGcpBillItemCount(kt, req)
 	if err != nil {
 		logs.Errorf("fetch gcp bill item count failed: %v, rid: %s", err, kt.Rid)
-		return nil, err
+		return err
 	}
 	exportLimit := min(totalCount, req.ExportLimit)
 
@@ -135,29 +157,48 @@ func fetchGcpBillItems(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq)
 		Year:   req.BillYear,
 		Month:  req.BillMonth,
 	}
-	result := make([]*billapi.GcpBillItem, 0, exportLimit)
+	lastID := ""
 	for offset := uint64(0); offset < exportLimit; offset = offset + uint64(core.DefaultMaxPageLimit) {
 		left := exportLimit - offset
+		expr := req.Filter
+		if len(lastID) > 0 {
+			expr, err = tools.And(
+				expr,
+				tools.RuleGreaterThan("id", lastID),
+			)
+			if err != nil {
+				logs.Errorf("build filter failed: %v, rid: %s", err, kt.Rid)
+				return err
+			}
+		}
 		billListReq := &databill.BillItemListReq{
 			ItemCommonOpt: commonOpt,
 			ListReq: &core.ListReq{
-				Filter: req.Filter,
+				Filter: expr,
 				Page: &core.BasePage{
 					Start: uint32(offset),
 					Limit: min(uint(left), core.DefaultMaxPageLimit),
+					Sort:  "id",
+					Order: core.Ascending,
 				},
 			},
 		}
-		tmpResult, err := b.client.DataService().Gcp.Bill.ListBillItem(kt, billListReq)
+		result, err := b.client.DataService().Gcp.Bill.ListBillItem(kt, billListReq)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		result = append(result, tmpResult.Details...)
+		if len(result.Details) == 0 {
+			continue
+		}
+		if err = convertFunc(result.Details); err != nil {
+			return err
+		}
+		lastID = result.Details[len(result.Details)-1].ID
 	}
-	return result, nil
+	return nil
 }
 
-func fetchGcpBillItemCount(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItemReq) (uint64, error) {
+func (b *billItemSvc) fetchGcpBillItemCount(kt *kit.Kit, req *bill.ExportBillItemReq) (uint64, error) {
 	countReq := &databill.BillItemListReq{
 		ItemCommonOpt: &databill.ItemCommonOpt{
 			Vendor: enumor.Gcp,
@@ -173,23 +214,30 @@ func fetchGcpBillItemCount(kt *kit.Kit, b *billItemSvc, req *bill.ExportBillItem
 	return details.Count, nil
 }
 
-func (b *billItemSvc) listGcpRegions(kt *kit.Kit, regionIDs []string) (map[string]string, error) {
-	regionIDs = slice.Unique(regionIDs)
-	if len(regionIDs) == 0 {
-		return nil, nil
-	}
-	listReq := &core.ListReq{
-		Filter: tools.ExpressionAnd(tools.RuleIn("region_id", slice.Unique(regionIDs))),
-		Page:   core.NewDefaultBasePage(),
-	}
-	regions, err := b.client.DataService().Gcp.Region.ListRegion(kt.Ctx, kt.Header(), listReq)
-	if err != nil {
-		logs.Errorf("list region failed: %v, rid: %s", err, kt.Rid)
-		return nil, err
-	}
+func (b *billItemSvc) listGcpRegions(kt *kit.Kit) (map[string]string, error) {
+
+	offset := uint32(0)
 	regionMap := make(map[string]string)
-	for _, region := range regions.Details {
-		regionMap[region.RegionID] = region.RegionName
+	for {
+		listReq := &core.ListReq{
+			Filter: tools.AllExpression(),
+			Page: &core.BasePage{
+				Start: offset,
+				Limit: core.DefaultMaxPageLimit,
+			},
+		}
+		regions, err := b.client.DataService().Gcp.Region.ListRegion(kt.Ctx, kt.Header(), listReq)
+		if err != nil {
+			logs.Errorf("list region failed: %v, rid: %s", err, kt.Rid)
+			return nil, err
+		}
+		if len(regions.Details) == 0 {
+			break
+		}
+		for _, region := range regions.Details {
+			regionMap[region.RegionID] = region.RegionName
+		}
+		offset = offset + uint32(core.DefaultMaxPageLimit)
 	}
 	return regionMap, nil
 }

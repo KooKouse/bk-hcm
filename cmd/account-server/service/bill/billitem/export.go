@@ -24,17 +24,11 @@ import (
 	"fmt"
 
 	"hcm/cmd/account-server/logics/bill/export"
-	accountset "hcm/pkg/api/core/account-set"
-	billapi "hcm/pkg/api/core/bill"
-	"hcm/pkg/api/data-service/cos"
-	"hcm/pkg/criteria/constant"
-	"hcm/pkg/thirdparty/esb/cmdb"
-	"hcm/pkg/tools/converter"
-	"hcm/pkg/tools/encode"
-	"hcm/pkg/tools/slice"
-
 	"hcm/pkg/api/account-server/bill"
 	"hcm/pkg/api/core"
+	accountset "hcm/pkg/api/core/account-set"
+	"hcm/pkg/api/data-service/cos"
+	"hcm/pkg/criteria/constant"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
@@ -42,6 +36,8 @@ import (
 	"hcm/pkg/kit"
 	"hcm/pkg/logs"
 	"hcm/pkg/rest"
+	"hcm/pkg/thirdparty/esb/cmdb"
+	"hcm/pkg/tools/encode"
 
 	"github.com/shopspring/decimal"
 )
@@ -97,35 +93,8 @@ func (b *billItemSvc) ExportBillItems(cts *rest.Contexts) (any, error) {
 	}
 }
 
-type getHeader func() []string
-
 func commonGetHeader() []string {
 	return []string{"站点类型", "核算年月", "业务名称", "一级帐号名称", "二级帐号名称", "地域"}
-}
-
-// fetchAccountBizInfo ...
-func fetchAccountBizInfo[T billapi.BillItemExtension](kt *kit.Kit, b *billItemSvc, records []*billapi.BillItem[T]) (
-	rootAccountMap map[string]*accountset.BaseRootAccount, mainAccountMap map[string]*accountset.BaseMainAccount,
-	bizNameMap map[int64]string, err error) {
-
-	rootAccountIDMap := make(map[string]struct{})
-	mainAccountIDMap := make(map[string]struct{})
-	bkBizIDMap := make(map[int64]struct{})
-	for _, item := range records {
-		rootAccountIDMap[item.RootAccountID] = struct{}{}
-		mainAccountIDMap[item.MainAccountID] = struct{}{}
-		bkBizIDMap[item.BkBizID] = struct{}{}
-	}
-	rootAccountIDs := converter.MapKeyToSlice(rootAccountIDMap)
-	mainAccountIDs := converter.MapKeyToSlice(mainAccountIDMap)
-	bkBizIDs := converter.MapKeyToSlice(bkBizIDMap)
-	rootAccountMap, mainAccountMap, bizNameMap, err = b.fetchAccountBizInfo(kt, rootAccountIDs,
-		mainAccountIDs, bkBizIDs)
-	if err != nil {
-		logs.Errorf("prepare related data failed: %v, rid: %s", err, kt.Rid)
-		return nil, nil, nil, err
-	}
-	return rootAccountMap, mainAccountMap, bizNameMap, nil
 }
 
 func (b *billItemSvc) getExchangeRate(kt *kit.Kit, year, month int) (*decimal.Decimal, error) {
@@ -183,70 +152,45 @@ func (b *billItemSvc) uploadFileAndReturnUrl(kt *kit.Kit, buf *bytes.Buffer) (st
 	return result.URL, nil
 }
 
-func (b *billItemSvc) listMainAccountByIDs(kt *kit.Kit, mainAccountIDs []string) (map[string]*accountset.BaseMainAccount, error) {
-	mainAccountIDs = slice.Unique(mainAccountIDs)
-	if len(mainAccountIDs) == 0 {
-		return nil, nil
-	}
+func (b *billItemSvc) listRootAccount(kt *kit.Kit, vendor enumor.Vendor) (
+	map[string]*accountset.BaseRootAccount, error) {
 
-	result := make(map[string]*accountset.BaseMainAccount, len(mainAccountIDs))
-	for _, ids := range slice.Split(mainAccountIDs, int(core.DefaultMaxPageLimit)) {
-		listReq := &core.ListReq{
-			Filter: tools.ExpressionAnd(tools.RuleIn("id", ids)),
-			Page:   core.NewDefaultBasePage(),
+	filter := tools.ExpressionAnd(tools.RuleEqual("vendor", vendor))
+	countReq := &core.ListReq{
+		Filter: filter,
+		Page:   core.NewCountPage(),
+	}
+	countResp, err := b.client.DataService().Global.MainAccount.List(kt, countReq)
+	if err != nil {
+		logs.Errorf("list main account failed, err: %v, rid: %s", err, kt.Rid)
+		return nil, err
+	}
+	total := countResp.Count
+
+	result := make(map[string]*accountset.BaseRootAccount)
+	for i := uint64(0); i < total; i += uint64(core.DefaultMaxPageLimit) {
+		listReq := &core.ListWithoutFieldReq{
+			Filter: filter,
+			Page: &core.BasePage{
+				Start: uint32(i),
+				Limit: core.DefaultMaxPageLimit,
+			},
 		}
-		resp, err := b.client.DataService().Global.MainAccount.List(kt, listReq)
+		listResult, err := b.client.DataService().Global.RootAccount.List(kt, listReq)
 		if err != nil {
+			logs.Errorf("list main account failed, err: %v, rid: %s", err, kt.Rid)
 			return nil, err
 		}
-		for _, detail := range resp.Details {
+		for _, detail := range listResult.Details {
 			result[detail.ID] = detail
 		}
 	}
 	return result, nil
 }
 
-func (b *billItemSvc) listRootAccount(kt *kit.Kit,
-	rootAccountIDs []string) (map[string]*accountset.BaseRootAccount, error) {
-
-	rootAccountIDs = slice.Unique(rootAccountIDs)
-	if len(rootAccountIDs) == 0 {
-		return nil, nil
-	}
-
-	result := make(map[string]*accountset.BaseRootAccount, len(rootAccountIDs))
-	for _, ids := range slice.Split(rootAccountIDs, int(core.DefaultMaxPageLimit)) {
-		listReq := &core.ListWithoutFieldReq{
-			Filter: tools.ExpressionAnd(tools.RuleIn("id", ids)),
-			Page:   core.NewDefaultBasePage(),
-		}
-		tmpResult, err := b.client.DataService().Global.RootAccount.List(kt, listReq)
-		if err != nil {
-			return nil, err
-		}
-		for _, item := range tmpResult.Details {
-			result[item.ID] = item
-		}
-	}
-	return result, nil
-}
-
-func (b *billItemSvc) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error) {
-	ids = slice.Unique(ids)
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	rules := []cmdb.Rule{
-		&cmdb.AtomRule{
-			Field:    "bk_biz_id",
-			Operator: "in",
-			Value:    ids,
-		},
-	}
-	expression := &cmdb.QueryFilter{Rule: &cmdb.CombinedRule{Condition: "AND", Rules: rules}}
+func (b *billItemSvc) listBiz(kt *kit.Kit) (map[int64]string, error) {
 	params := &cmdb.SearchBizParams{
-		BizPropertyFilter: expression,
-		Fields:            []string{"bk_biz_id", "bk_biz_name"},
+		Fields: []string{"bk_biz_id", "bk_biz_name"},
 	}
 	resp, err := b.esbClient.Cmdb().SearchBusiness(kt, params)
 	if err != nil {
@@ -262,22 +206,27 @@ func (b *billItemSvc) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error
 	return data, nil
 }
 
-// prepareRelateData 准备关联数据
-func (b *billItemSvc) fetchAccountBizInfo(kt *kit.Kit, rootAccountIDs, mainAccountIDs []string, bkBizIDs []int64) (
+// fetchAccountBizInfo 根据vendor获取所有关联的数据
+func (b *billItemSvc) fetchAccountBizInfo(kt *kit.Kit, vendor enumor.Vendor) (
 	rootAccountMap map[string]*accountset.BaseRootAccount, mainAccountMap map[string]*accountset.BaseMainAccount,
 	bizNameMap map[int64]string, err error) {
 
-	bizNameMap, err = b.listBiz(kt, bkBizIDs)
+	bizNameMap, err = b.listBiz(kt)
 	if err != nil {
 		logs.Errorf("fail to list biz, err: %v, rid: %s", err, kt.Rid)
 		return nil, nil, nil, err
 	}
-	mainAccountMap, err = b.listMainAccountByIDs(kt, mainAccountIDs)
+	mainAccounts, err := b.listMainAccount(kt, vendor)
 	if err != nil {
 		logs.Errorf("fail to list main account, err: %v, rid: %s", err, kt.Rid)
 		return nil, nil, nil, err
 	}
-	rootAccountMap, err = b.listRootAccount(kt, rootAccountIDs)
+	mainAccountMap = make(map[string]*accountset.BaseMainAccount, len(mainAccounts))
+	for _, account := range mainAccounts {
+		mainAccountMap[account.ID] = account
+	}
+
+	rootAccountMap, err = b.listRootAccount(kt, vendor)
 	if err != nil {
 		logs.Errorf("fail to list root account, err: %v, rid: %s", err, kt.Rid)
 		return nil, nil, nil, err
