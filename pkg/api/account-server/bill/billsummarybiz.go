@@ -1,7 +1,10 @@
 package bill
 
 import (
+	"errors"
+
 	"hcm/pkg/api/core"
+	"hcm/pkg/criteria/constant"
 	"hcm/pkg/criteria/validator"
 )
 
@@ -27,6 +30,20 @@ type BizSummaryExportReq struct {
 }
 
 // Validate ...
-func (req *BizSummaryExportReq) Validate() error {
-	return validator.Validate.Struct(req)
+func (r *BizSummaryExportReq) Validate() error {
+	if r.ExportLimit > constant.ExcelExportLimit {
+		return errors.New("export limit exceed")
+	}
+
+	if r.BillYear == 0 {
+		return errors.New("year is required")
+	}
+	if r.BillMonth == 0 {
+		return errors.New("month is required")
+	}
+	if r.BillMonth > 12 || r.BillMonth < 0 {
+		return errors.New("month must between 1 and 12")
+	}
+
+	return validator.Validate.Struct(r)
 }

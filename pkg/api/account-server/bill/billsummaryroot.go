@@ -27,6 +27,7 @@ import (
 	"hcm/pkg/criteria/constant"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/criteria/validator"
+	tablebill "hcm/pkg/dal/table/bill"
 	"hcm/pkg/runtime/filter"
 )
 
@@ -34,8 +35,8 @@ import (
 type RootAccountSummaryListReq struct {
 	BillYear  int                `json:"bill_year" validate:"required"`
 	BillMonth int                `json:"bill_month" validate:"required"`
-	Filter    *filter.Expression `json:"filter" validate:"omitempty"`
-	Page      *core.BasePage     `json:"page" validate:"omitempty"`
+	Filter    *filter.Expression `json:"filter" validate:"required"`
+	Page      *core.BasePage     `json:"page" validate:"required"`
 }
 
 // Validate ...
@@ -94,9 +95,24 @@ type RootAccountSummaryExportReq struct {
 }
 
 // Validate ...
-func (req *RootAccountSummaryExportReq) Validate() error {
-	if req.ExportLimit > constant.ExcelExportLimit {
+func (r *RootAccountSummaryExportReq) Validate() error {
+	if r.ExportLimit > constant.ExcelExportLimit {
 		return errors.New("export limit exceed")
 	}
-	return validator.Validate.Struct(req)
+	if r.Filter != nil {
+		err := r.Filter.Validate(filter.NewExprOption(filter.RuleFields(tablebill.AccountBillItemColumns.ColumnTypes())))
+		if err != nil {
+			return err
+		}
+	}
+	if r.BillYear == 0 {
+		return errors.New("year is required")
+	}
+	if r.BillMonth == 0 {
+		return errors.New("month is required")
+	}
+	if r.BillMonth > 12 || r.BillMonth < 0 {
+		return errors.New("month must between 1 and 12")
+	}
+	return validator.Validate.Struct(r)
 }

@@ -54,13 +54,13 @@ func (r *ExportBillItemReq) Validate() error {
 		}
 	}
 	if r.BillYear == 0 {
-		return errf.New(errf.InvalidParameter, "year is required")
+		return errors.New("year is required")
 	}
 	if r.BillMonth == 0 {
-		return errf.New(errf.InvalidParameter, "month is required")
+		return errors.New("month is required")
 	}
 	if r.BillMonth > 12 || r.BillMonth < 0 {
-		return errf.New(errf.InvalidParameter, "month must between 1 and 12")
+		return errors.New("month must between 1 and 12")
 	}
 	return validator.Validate.Struct(r)
 }
@@ -179,22 +179,6 @@ func (req *AdjustmentItemSumReq) Validate() error {
 type AdjustmentItemSumResult struct {
 	Count   uint64                                                                       `json:"count"`
 	CostMap map[enumor.BillAdjustmentType]map[enumor.CurrencyCode]*bill.CostWithCurrency `json:"cost_map"`
-}
-
-// AdjustmentItemExportReq ...
-type AdjustmentItemExportReq struct {
-	BillYear    int                `json:"bill_year" validate:"required"`
-	BillMonth   int                `json:"bill_month" validate:"required"`
-	ExportLimit uint64             `json:"export_limit" validate:"omitempty"`
-	Filter      *filter.Expression `json:"filter" validate:"omitempty"`
-}
-
-// Validate ...
-func (req *AdjustmentItemExportReq) Validate() error {
-	if req.ExportLimit > constant.ExcelExportLimit {
-		return errors.New("export limit exceed")
-	}
-	return validator.Validate.Struct(req)
 }
 
 // BillExportResult ...

@@ -28,6 +28,7 @@ import (
 	"hcm/pkg/criteria/constant"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/criteria/validator"
+	tablebill "hcm/pkg/dal/table/bill"
 	"hcm/pkg/runtime/filter"
 )
 
@@ -84,9 +85,26 @@ type MainAccountSummaryExportReq struct {
 }
 
 // Validate ...
-func (req *MainAccountSummaryExportReq) Validate() error {
-	if req.ExportLimit > constant.ExcelExportLimit {
+func (r *MainAccountSummaryExportReq) Validate() error {
+	if r.ExportLimit > constant.ExcelExportLimit {
 		return errors.New("export limit exceed")
 	}
-	return validator.Validate.Struct(req)
+	if r.Filter != nil {
+		err := r.Filter.Validate(filter.NewExprOption(
+			filter.RuleFields(tablebill.AccountBillSummaryMainColumns.ColumnTypes())))
+		if err != nil {
+			return err
+		}
+	}
+	if r.BillYear == 0 {
+		return errors.New("year is required")
+	}
+	if r.BillMonth == 0 {
+		return errors.New("month is required")
+	}
+	if r.BillMonth > 12 || r.BillMonth < 0 {
+		return errors.New("month must between 1 and 12")
+	}
+
+	return validator.Validate.Struct(r)
 }
