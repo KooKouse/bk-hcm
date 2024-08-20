@@ -22,6 +22,7 @@ package bill
 import (
 	"encoding/json"
 	"errors"
+	"io"
 
 	"hcm/pkg/api/core"
 	"hcm/pkg/api/core/bill"
@@ -181,7 +182,24 @@ type AdjustmentItemSumResult struct {
 	CostMap map[enumor.BillAdjustmentType]map[enumor.CurrencyCode]*bill.CostWithCurrency `json:"cost_map"`
 }
 
-// BillExportResult ...
-type BillExportResult struct {
-	DownloadURL string `json:"download_url"`
+// FileDownloadResp define file download resp.
+type FileDownloadResp struct {
+	ContentTypeStr        string
+	ContentDispositionStr string
+	Buffer                io.Reader
+}
+
+// ContentType ...
+func (f *FileDownloadResp) ContentType() string {
+	return f.ContentTypeStr
+}
+
+// ContentDisposition ...
+func (f *FileDownloadResp) ContentDisposition() string {
+	return f.ContentDispositionStr
+}
+
+// Reader return file reader.
+func (f *FileDownloadResp) Reader() io.Reader {
+	return f.Buffer
 }

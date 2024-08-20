@@ -20,7 +20,6 @@
 package billsummarymain
 
 import (
-	"bytes"
 	"fmt"
 
 	"hcm/cmd/account-server/logics/bill/export"
@@ -28,8 +27,6 @@ import (
 	"hcm/pkg/api/core"
 	accountset "hcm/pkg/api/core/account-set"
 	dsbillapi "hcm/pkg/api/data-service/bill"
-	"hcm/pkg/api/data-service/cos"
-	"hcm/pkg/criteria/constant"
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
 	"hcm/pkg/iam/meta"
@@ -37,11 +34,10 @@ import (
 	"hcm/pkg/logs"
 	"hcm/pkg/rest"
 	"hcm/pkg/tools/converter"
-	"hcm/pkg/tools/encode"
 )
 
 const (
-	defaultExportFilename = "bill_summary_main"
+	defaultExportFilename = "bill_summary_main.csv"
 )
 
 // ExportMainAccountSummary export main account summary with options
@@ -107,39 +103,12 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 		logs.Errorf("generate csv failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
-	url, err := s.uploadFileAndReturnUrl(cts.Kit, buf)
-	if err != nil {
-		logs.Errorf("upload file failed, err: %v, rid: %s", err, cts.Kit.Rid)
-		return nil, err
-	}
 
-	return asbillapi.BillExportResult{DownloadURL: url}, nil
-}
-
-func (s *service) uploadFileAndReturnUrl(kt *kit.Kit, buf *bytes.Buffer) (string, error) {
-	filename := export.GenerateExportCSVFilename(constant.BillExportFolderPrefix, defaultExportFilename)
-	base64Str, err := encode.ReaderToBase64Str(buf)
-	if err != nil {
-		return "", err
-	}
-	uploadFileReq := &cos.UploadFileReq{
-		Filename:   filename,
-		FileBase64: base64Str,
-	}
-	if err = s.client.DataService().Global.Cos.Upload(kt, uploadFileReq); err != nil {
-		logs.Errorf("update file failed, err: %v, rid: %s", err, kt.Rid)
-		return "", err
-	}
-	generateURLReq := &cos.GenerateTemporalUrlReq{
-		Filename:   filename,
-		TTLSeconds: 3600,
-	}
-	result, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(kt, "download", generateURLReq)
-	if err != nil {
-		logs.Errorf("generate url failed, err: %v, rid: %s", err, kt.Rid)
-		return "", err
-	}
-	return result.URL, nil
+	return asbillapi.FileDownloadResp{
+		ContentTypeStr:        "text/csv",
+		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, defaultExportFilename),
+		Buffer:                buf,
+	}, nil
 }
 
 func (s *service) fetchMainAccountSummary(cts *rest.Contexts, req *asbillapi.MainAccountSummaryExportReq) (

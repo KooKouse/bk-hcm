@@ -22,6 +22,7 @@ package rest
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"strconv"
 
@@ -136,6 +137,21 @@ func (c *Contexts) WithStatusCode(statusCode int) *Contexts {
 	return c
 }
 
+func (c *Contexts) respFile(resp FileDownloadResp) {
+	c.resp.AddHeader("Content-Type", resp.ContentType())
+	c.resp.AddHeader("Content-Disposition", resp.ContentDisposition())
+	bytesStream, err := io.ReadAll(resp.Reader())
+	if err != nil {
+		logs.ErrorDepthf(1, "do response failed, err: %s, rid: %s", err.Error(), c.Kit.Rid)
+		return
+	}
+	_, err = c.resp.ResponseWriter.Write(bytesStream)
+	if err != nil {
+		logs.ErrorDepthf(1, "do response failed, err: %s, rid: %s", err.Error(), c.Kit.Rid)
+		return
+	}
+}
+
 // respEntity response request with a success response.
 func (c *Contexts) respEntity(data interface{}) {
 	if c.respStatusCode != 0 {
@@ -143,8 +159,13 @@ func (c *Contexts) respEntity(data interface{}) {
 	}
 
 	c.resp.Header().Set(constant.RidKey, c.Kit.Rid)
-	c.resp.AddHeader(restful.HEADER_ContentType, restful.MIME_JSON)
 
+	if fileResp, ok := data.(FileDownloadResp); ok {
+		c.respFile(fileResp)
+		return
+	}
+
+	c.resp.AddHeader(restful.HEADER_ContentType, restful.MIME_JSON)
 	resp := &Response{
 		Code:    errf.OK,
 		Message: "",

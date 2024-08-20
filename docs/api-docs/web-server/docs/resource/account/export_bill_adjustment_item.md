@@ -135,26 +135,6 @@ POST /api/v1/account/bills/adjustment_items/export
 
 #### 导出成功结果示例
 
-```json
-{
-  "code": 0,
-  "message": "",
-  "data": {
-    "download_url": ""
-  }
-}
-```
-
-### 响应参数说明
-
-| 参数名称    | 参数类型   | 描述   |
-|---------|--------|------|
-| code    | int32  | 状态码  |
-| message | string | 请求信息 |
-| data    | string | 响应数据 |
-
-#### data
-
-| 参数名称         | 参数类型   | 描述        |
-|--------------|--------|-----------|
-| download_url | string | 导出文件的下载地址 |
+Content-Type: text/csv
+Content-Disposition: attachment; filename="bill_adjustment_item.csv"
+[二进制文件流]

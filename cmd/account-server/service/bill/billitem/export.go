@@ -20,15 +20,11 @@
 package billitem
 
 import (
-	"bytes"
 	"fmt"
 
-	"hcm/cmd/account-server/logics/bill/export"
 	"hcm/pkg/api/account-server/bill"
 	"hcm/pkg/api/core"
 	accountset "hcm/pkg/api/core/account-set"
-	"hcm/pkg/api/data-service/cos"
-	"hcm/pkg/criteria/constant"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
@@ -37,13 +33,12 @@ import (
 	"hcm/pkg/logs"
 	"hcm/pkg/rest"
 	"hcm/pkg/thirdparty/esb/cmdb"
-	"hcm/pkg/tools/encode"
 
 	"github.com/shopspring/decimal"
 )
 
 const (
-	defaultExportFilename = "bill_item"
+	defaultExportFilename = "bill_item.csv"
 )
 
 var (
@@ -125,31 +120,6 @@ func (b *billItemSvc) getExchangeRate(kt *kit.Kit, year, month int) (*decimal.De
 			enumor.CurrencyUSD, enumor.CurrencyRMB, year, month, kt.Rid)
 	}
 	return result.Details[0].ExchangeRate, nil
-}
-
-func (b *billItemSvc) uploadFileAndReturnUrl(kt *kit.Kit, buf *bytes.Buffer) (string, error) {
-	filename := export.GenerateExportCSVFilename(constant.BillExportFolderPrefix, defaultExportFilename)
-	base64Str, err := encode.ReaderToBase64Str(buf)
-	if err != nil {
-		return "", err
-	}
-	uploadReq := &cos.UploadFileReq{
-		Filename:   filename,
-		FileBase64: base64Str,
-	}
-	if err = b.client.DataService().Global.Cos.Upload(kt, uploadReq); err != nil {
-		return "", err
-	}
-
-	generateReq := &cos.GenerateTemporalUrlReq{
-		Filename:   filename,
-		TTLSeconds: 3600,
-	}
-	result, err := b.client.DataService().Global.Cos.GenerateTemporalUrl(kt, "download", generateReq)
-	if err != nil {
-		return "", err
-	}
-	return result.URL, nil
 }
 
 func (b *billItemSvc) listRootAccount(kt *kit.Kit, vendor enumor.Vendor) (

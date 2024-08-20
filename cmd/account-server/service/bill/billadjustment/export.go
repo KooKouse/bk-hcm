@@ -9,8 +9,6 @@ import (
 	accountset "hcm/pkg/api/core/account-set"
 	billcore "hcm/pkg/api/core/bill"
 	dsbillapi "hcm/pkg/api/data-service/bill"
-	"hcm/pkg/api/data-service/cos"
-	"hcm/pkg/criteria/constant"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
@@ -21,12 +19,11 @@ import (
 	"hcm/pkg/runtime/filter"
 	"hcm/pkg/thirdparty/esb/cmdb"
 	"hcm/pkg/tools/converter"
-	"hcm/pkg/tools/encode"
 	"hcm/pkg/tools/slice"
 )
 
 const (
-	defaultExportFilename = "bill_adjustment_item"
+	defaultExportFilename = "bill_adjustment_item.csv"
 )
 
 // ExportBillAdjustmentItem 查询调账明细
@@ -86,30 +83,11 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 		return nil, err
 	}
 
-	filename := export.GenerateExportCSVFilename(constant.BillExportFolderPrefix, defaultExportFilename)
-	base64Str, err := encode.ReaderToBase64Str(buf)
-	if err != nil {
-		return nil, err
-	}
-	uploadFileReq := &cos.UploadFileReq{
-		Filename:   filename,
-		FileBase64: base64Str,
-	}
-	if err = b.client.DataService().Global.Cos.Upload(cts.Kit, uploadFileReq); err != nil {
-		logs.Errorf("update file failed, err: %v, rid: %s", err, cts.Kit.Rid)
-		return nil, err
-	}
-	generateURLReq := &cos.GenerateTemporalUrlReq{
-		Filename:   filename,
-		TTLSeconds: 3600,
-	}
-	url, err := b.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download", generateURLReq)
-	if err != nil {
-		logs.Errorf("generate url failed, err: %v, rid: %s", err, cts.Kit.Rid)
-		return nil, err
-	}
-
-	return bill.BillExportResult{DownloadURL: url.URL}, nil
+	return bill.FileDownloadResp{
+		ContentTypeStr:        "text/csv",
+		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, defaultExportFilename),
+		Buffer:                buf,
+	}, nil
 }
 
 func (b *billAdjustmentSvc) fetchBillAdjustmentItem(kt *kit.Kit, req *bill.AdjustmentItemExportReq) (

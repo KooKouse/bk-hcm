@@ -22,6 +22,7 @@ package rest
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"hcm/pkg/iam/meta"
@@ -65,4 +66,11 @@ func WriteResp(w http.ResponseWriter, resp interface{}) {
 	}
 
 	return
+}
+
+// FileDownloadResp define file download resp.
+type FileDownloadResp interface {
+	ContentType() string
+	ContentDisposition() string
+	Reader() io.Reader
 }

@@ -109,12 +109,11 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 		return nil, err
 	}
 
-	url, err := b.uploadFileAndReturnUrl(kt, buff)
-	if err != nil {
-		logs.Errorf("upload file failed: %v, rid: %s", err, kt.Rid)
-		return nil, err
-	}
-	return bill.BillExportResult{DownloadURL: url}, nil
+	return bill.FileDownloadResp{
+		ContentTypeStr:        "text/csv",
+		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, defaultExportFilename),
+		Buffer:                buff,
+	}, nil
 }
 
 func convertHuaweiBillItems(kt *kit.Kit, items []*billapi.HuaweiBillItem, bizNameMap map[int64]string,

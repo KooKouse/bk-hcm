@@ -27,8 +27,6 @@ import (
 	"hcm/pkg/api/core"
 	accountset "hcm/pkg/api/core/account-set"
 	dsbillapi "hcm/pkg/api/data-service/bill"
-	"hcm/pkg/api/data-service/cos"
-	"hcm/pkg/criteria/constant"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/criteria/errf"
 	"hcm/pkg/dal/dao/tools"
@@ -37,14 +35,13 @@ import (
 	"hcm/pkg/logs"
 	"hcm/pkg/rest"
 	"hcm/pkg/tools/converter"
-	"hcm/pkg/tools/encode"
 	"hcm/pkg/tools/slice"
 
 	"github.com/TencentBlueKing/gopkg/conv"
 )
 
 const (
-	defaultExportFilename = "bill_summary_root"
+	defaultExportFilename = "bill_summary_root.csv"
 )
 
 // ExportRootAccountSummary export root account summary with options
@@ -92,31 +89,11 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 		logs.Errorf("generate csv failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
-
-	filename := export.GenerateExportCSVFilename(constant.BillExportFolderPrefix, defaultExportFilename)
-	base64Str, err := encode.ReaderToBase64Str(buf)
-	if err != nil {
-		return nil, err
-	}
-	uploadFileReq := &cos.UploadFileReq{
-		Filename:   filename,
-		FileBase64: base64Str,
-	}
-	if err = s.client.DataService().Global.Cos.Upload(cts.Kit, uploadFileReq); err != nil {
-		logs.Errorf("update file failed, err: %v, rid: %s", err, cts.Kit.Rid)
-		return nil, err
-	}
-	generateURLReq := &cos.GenerateTemporalUrlReq{
-		Filename:   filename,
-		TTLSeconds: 3600,
-	}
-	url, err := s.client.DataService().Global.Cos.GenerateTemporalUrl(cts.Kit, "download", generateURLReq)
-	if err != nil {
-		logs.Errorf("generate url failed, err: %v, rid: %s", err, cts.Kit.Rid)
-		return nil, err
-	}
-
-	return asbillapi.BillExportResult{DownloadURL: url.URL}, nil
+	return asbillapi.FileDownloadResp{
+		ContentTypeStr:        "text/csv",
+		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, defaultExportFilename),
+		Buffer:                buf,
+	}, nil
 }
 
 func (s *service) fetchRootAccountSummary(cts *rest.Contexts, req *asbillapi.RootAccountSummaryExportReq) (
