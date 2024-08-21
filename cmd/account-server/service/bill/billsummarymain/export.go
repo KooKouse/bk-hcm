@@ -94,7 +94,7 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 	data = append(data, export.BillSummaryMainTableHeader)
 	table, err := toRawData(cts.Kit, result, mainAccountMap, rootAccountMap, bizMap)
 	if err != nil {
-		logs.Errorf("convert to raw data error: %s, rid: %s", err, cts.Kit.Rid)
+		logs.Errorf("convert to raw data error: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 	data = append(data, table...)

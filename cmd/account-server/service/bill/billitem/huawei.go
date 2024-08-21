@@ -77,7 +77,7 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 
 	rootAccountMap, mainAccountMap, bizNameMap, err := b.fetchAccountBizInfo(kt, enumor.HuaWei)
 	if err != nil {
-		logs.Errorf("prepare related data failed: %v, rid: %s", err, kt.Rid)
+		logs.Errorf("[exportHuaweiBillItems] prepare related data failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
 
@@ -93,7 +93,7 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 		}
 		table, err := convertHuaweiBillItems(kt, items, bizNameMap, mainAccountMap, rootAccountMap, rate)
 		if err != nil {
-			logs.Errorf("convert to raw data error: %s, rid: %s", err, kt.Rid)
+			logs.Errorf("[exportHuaweiBillItems] convert to raw data error: %v, rid: %s", err, kt.Rid)
 			return err
 		}
 		err = writer.WriteAll(table)
@@ -168,7 +168,7 @@ func convertHuaweiBillItems(kt *kit.Kit, items []*billapi.HuaweiBillItem, bizNam
 		}
 		fields, err := tmp.GetHeaderFields()
 		if err != nil {
-			logs.Errorf("get header fields failed: %v, rid: %s", err, kt.Rid)
+			logs.Errorf("get header fields failed: %v, rid: %s, table: %v", err, kt.Rid, fields)
 			return nil, err
 		}
 		result = append(result, fields)

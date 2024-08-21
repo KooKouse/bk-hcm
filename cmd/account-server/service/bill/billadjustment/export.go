@@ -45,7 +45,7 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 
 	result, err := b.fetchBillAdjustmentItem(cts.Kit, req)
 	if err != nil {
-		logs.Errorf("fetch bill adjustment item failed, err: %v, rid: %s", err, cts.Kit.Rid)
+		logs.Errorf("fetch bill adjustment item failed, err: %v, rid: %s, req: %v", err, cts.Kit.Rid, req)
 		return nil, err
 	}
 
@@ -65,7 +65,7 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 	}
 	bizMap, err := b.listBiz(cts.Kit, bizIDs)
 	if err != nil {
-		logs.Errorf("list biz failed, err: %v, rid: %s", err, cts.Kit.Rid)
+		logs.Errorf("list biz failed, err: %v, rid: %s, bizIDs: %v", err, cts.Kit.Rid, bizIDs)
 		return nil, err
 	}
 
@@ -73,7 +73,7 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 	data = append(data, export.BillAdjustmentTableHeader)
 	table, err := toRawData(cts.Kit, result, mainAccountMap, bizMap)
 	if err != nil {
-		logs.Errorf("convert to raw data error: %s, rid: %s", err, cts.Kit.Rid)
+		logs.Errorf("convert to raw data error: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 	data = append(data, table...)
@@ -170,7 +170,7 @@ func toRawData(kt *kit.Kit, details []*billcore.AdjustmentItem, mainAccountMap m
 		}
 		fields, err := table.GetHeaderFields()
 		if err != nil {
-			logs.Errorf("get header fields failed: %v, rid: %s", err, kt.Rid)
+			logs.Errorf("get header fields failed: %v, rid: %s, table: %v", err, kt.Rid, table)
 			return nil, err
 		}
 		data = append(data, fields)
@@ -186,7 +186,7 @@ func (b *billAdjustmentSvc) listBiz(kt *kit.Kit, ids []int64) (map[int64]string,
 	rules := []cmdb.Rule{
 		&cmdb.AtomRule{
 			Field:    "bk_biz_id",
-			Operator: "in",
+			Operator: cmdb.OperatorIn,
 			Value:    ids,
 		},
 	}
@@ -237,6 +237,8 @@ func (b *billAdjustmentSvc) listMainAccount(kt *kit.Kit, ids []string) (map[stri
 			Page: &core.BasePage{
 				Start: uint32(offset),
 				Limit: core.DefaultMaxPageLimit,
+				Sort:  "id",
+				Order: core.Ascending,
 			},
 		}
 		tmpResult, err := b.client.DataService().Global.MainAccount.List(kt, listReq)

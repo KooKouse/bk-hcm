@@ -41,7 +41,7 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 
 	rootAccountMap, mainAccountMap, bizNameMap, err := b.fetchAccountBizInfo(kt, enumor.Aws)
 	if err != nil {
-		logs.Errorf("prepare related data failed: %v, rid: %s", err, kt.Rid)
+		logs.Errorf("[exportAwsBillItems] fetch account and biz info failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
 
@@ -57,7 +57,7 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 		}
 		table, err := convertAwsBillItems(kt, items, bizNameMap, mainAccountMap, rootAccountMap, rate)
 		if err != nil {
-			logs.Errorf("convert to raw data error: %s, rid: %s", err, kt.Rid)
+			logs.Errorf("[exportAwsBillItems] convert to raw data error: %v, rid: %s", err, kt.Rid)
 			return err
 		}
 		err = writer.WriteAll(table)
@@ -69,7 +69,7 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 	}
 	err = b.fetchAwsBillItems(kt, req, convFunc)
 	if err != nil {
-		logs.Errorf("fetch aws bill items  for export failed, err: %v, rid: %s", err, kt.Rid)
+		logs.Errorf("fetch aws bill items for export failed, err: %v, rid: %s, req: %v", err, kt.Rid, req)
 		return nil, err
 	}
 
@@ -133,7 +133,7 @@ func convertAwsBillItems(kt *kit.Kit, items []*billapi.AwsBillItem, bizNameMap m
 		}
 		fields, err := table.GetHeaderFields()
 		if err != nil {
-			logs.Errorf("get header fields failed: %v, rid: %s", err, kt.Rid)
+			logs.Errorf("get header fields failed: %v, rid: %s, table: %v", err, kt.Rid, table)
 			return nil, err
 		}
 		result = append(result, fields)

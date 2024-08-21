@@ -41,12 +41,6 @@ const (
 	defaultExportFilename = "bill_item.csv"
 )
 
-var (
-	azureExcelHeader = []string{"区域", "地区编码", "核算年月", "业务名称",
-		"账号邮箱", "子账号名称", "服务一级类别名称", "服务二级类别名称", "服务三级类别名称", "产品名称", "资源类别",
-		"计量地区", "资源地区编码", "单位", "用量", "折后税前成本（外币）", "币种", "汇率", "RMB成本（元）"}
-)
-
 // ExportBillItems 导出账单明细
 func (b *billItemSvc) ExportBillItems(cts *rest.Contexts) (any, error) {
 	vendor := enumor.Vendor(cts.PathParameter("vendor").String())
@@ -188,7 +182,7 @@ func (b *billItemSvc) fetchAccountBizInfo(kt *kit.Kit, vendor enumor.Vendor) (
 	}
 	mainAccounts, err := b.listMainAccount(kt, vendor)
 	if err != nil {
-		logs.Errorf("fail to list main account, err: %v, rid: %s", err, kt.Rid)
+		logs.Errorf("fail to list main account, err: %v, rid: %s, vendor: %s", err, kt.Rid, vendor)
 		return nil, nil, nil, err
 	}
 	mainAccountMap = make(map[string]*accountset.BaseMainAccount, len(mainAccounts))
@@ -198,7 +192,7 @@ func (b *billItemSvc) fetchAccountBizInfo(kt *kit.Kit, vendor enumor.Vendor) (
 
 	rootAccountMap, err = b.listRootAccount(kt, vendor)
 	if err != nil {
-		logs.Errorf("fail to list root account, err: %v, rid: %s", err, kt.Rid)
+		logs.Errorf("fail to list root account, err: %v, rid: %s, vendor: %s", err, kt.Rid, vendor)
 		return nil, nil, nil, err
 	}
 	return rootAccountMap, mainAccountMap, bizNameMap, nil

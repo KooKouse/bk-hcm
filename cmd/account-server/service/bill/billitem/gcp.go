@@ -42,7 +42,7 @@ func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 
 	rootAccountMap, mainAccountMap, bizNameMap, err := b.fetchAccountBizInfo(kt, enumor.Gcp)
 	if err != nil {
-		logs.Errorf("prepare related data failed: %v, rid: %s", err, kt.Rid)
+		logs.Errorf("[exportGcpBillItems] prepare related data failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
 	}
 	regionMap, err := b.listGcpRegions(kt)
@@ -63,7 +63,7 @@ func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 		}
 		table, err := convertGcpBillItem(kt, items, bizNameMap, mainAccountMap, rootAccountMap, regionMap, rate)
 		if err != nil {
-			logs.Errorf("convert to raw data error: %s, rid: %s", err, kt.Rid)
+			logs.Errorf("[exportGcpBillItems] convert to raw data error: %v, rid: %s", err, kt.Rid)
 			return err
 		}
 		err = writer.WriteAll(table)
@@ -131,7 +131,7 @@ func convertGcpBillItem(kt *kit.Kit, items []*billapi.GcpBillItem, bizNameMap ma
 
 		fields, err := tmp.GetHeaderFields()
 		if err != nil {
-			logs.Errorf("get header fields failed: %v, rid: %s", err, kt.Rid)
+			logs.Errorf("get header fields failed: %v, rid: %s, table: %v", err, kt.Rid, table)
 			return nil, err
 		}
 		result = append(result, fields)
@@ -164,7 +164,7 @@ func (b *billItemSvc) fetchGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemReq
 				tools.RuleGreaterThan("id", lastID),
 			)
 			if err != nil {
-				logs.Errorf("build filter failed: %v, rid: %s", err, kt.Rid)
+				logs.Errorf("[fetchGcpBillItems] build filter failed: %v, rid: %s, lastID: %s, filter: %v", err, kt.Rid, lastID, expr)
 				return err
 			}
 		}
@@ -225,7 +225,7 @@ func (b *billItemSvc) listGcpRegions(kt *kit.Kit) (map[string]string, error) {
 		}
 		regions, err := b.client.DataService().Gcp.Region.ListRegion(kt.Ctx, kt.Header(), listReq)
 		if err != nil {
-			logs.Errorf("list region failed: %v, rid: %s", err, kt.Rid)
+			logs.Errorf("list gcp region failed: %v, rid: %s", err, kt.Rid)
 			return nil, err
 		}
 		if len(regions.Details) == 0 {
