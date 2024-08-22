@@ -164,7 +164,8 @@ func (b *billItemSvc) fetchGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemReq
 				tools.RuleGreaterThan("id", lastID),
 			)
 			if err != nil {
-				logs.Errorf("[fetchGcpBillItems] build filter failed: %v, rid: %s, lastID: %s, filter: %v", err, kt.Rid, lastID, expr)
+				logs.Errorf("[fetchGcpBillItems] build filter failed: %v, rid: %s, lastID: %s, filter: %v",
+					err, kt.Rid, lastID, expr)
 				return err
 			}
 		}
