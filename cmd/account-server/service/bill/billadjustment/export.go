@@ -83,7 +83,7 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 		return nil, err
 	}
 
-	return bill.FileDownloadResp{
+	return &bill.FileDownloadResp{
 		ContentTypeStr:        "text/csv",
 		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, defaultExportFilename),
 		Buffer:                buf,

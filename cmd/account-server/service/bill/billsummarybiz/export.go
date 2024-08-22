@@ -69,7 +69,7 @@ func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 		return nil, err
 	}
 
-	return bill.FileDownloadResp{
+	return &bill.FileDownloadResp{
 		ContentTypeStr:        "text/csv",
 		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, defaultExportFilename),
 		Buffer:                buf,

@@ -28,6 +28,8 @@ import (
 // NewCsvWriter ...
 func NewCsvWriter() (*bytes.Buffer, *csv.Writer) {
 	var buffer bytes.Buffer
+	// 写入BOM头, 兼容windows excel打开csv文件时中午乱码
+	buffer.Write([]byte{0xEF, 0xBB, 0xBF})
 	return &buffer, csv.NewWriter(&buffer)
 }
 
@@ -35,13 +37,13 @@ func NewCsvWriter() (*bytes.Buffer, *csv.Writer) {
 func GenerateCSV(data [][]string) (*bytes.Buffer, error) {
 	// 创建CSV文件的缓冲区
 	var buffer bytes.Buffer
+	// 写入BOM头, 兼容windows excel打开csv文件时中午乱码
+	buffer.Write([]byte{0xEF, 0xBB, 0xBF})
 	csvWriter := csv.NewWriter(&buffer)
-
 	err := csvWriter.WriteAll(data)
 	if err != nil {
 		return nil, fmt.Errorf("write record to csv failed, err %s", err.Error())
 	}
-
 	// 刷新缓冲区，确保所有记录都写入
 	csvWriter.Flush()
 	return &buffer, nil

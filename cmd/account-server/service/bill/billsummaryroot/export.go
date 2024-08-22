@@ -89,7 +89,7 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 		logs.Errorf("generate csv failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
-	return asbillapi.FileDownloadResp{
+	return &asbillapi.FileDownloadResp{
 		ContentTypeStr:        "text/csv",
 		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, defaultExportFilename),
 		Buffer:                buf,

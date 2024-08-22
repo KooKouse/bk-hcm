@@ -104,7 +104,7 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 		return nil, err
 	}
 
-	return asbillapi.FileDownloadResp{
+	return &asbillapi.FileDownloadResp{
 		ContentTypeStr:        "text/csv",
 		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, defaultExportFilename),
 		Buffer:                buf,

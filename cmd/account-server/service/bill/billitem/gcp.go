@@ -78,7 +78,7 @@ func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 		return nil, err
 	}
 
-	return bill.FileDownloadResp{
+	return &bill.FileDownloadResp{
 		ContentTypeStr:        "text/csv",
 		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, defaultExportFilename),
 		Buffer:                buff,
@@ -131,7 +131,7 @@ func convertGcpBillItem(kt *kit.Kit, items []*billapi.GcpBillItem, bizNameMap ma
 
 		fields, err := tmp.GetHeaderFields()
 		if err != nil {
-			logs.Errorf("get header fields failed: %v, rid: %s, table: %v", err, kt.Rid, table)
+			logs.Errorf("get header fields failed: %v, rid: %s, table: %v", err, kt.Rid, fields)
 			return nil, err
 		}
 		result = append(result, fields)
