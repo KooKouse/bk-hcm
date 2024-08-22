@@ -133,7 +133,7 @@ func (b *billItemSvc) listRootAccount(kt *kit.Kit, vendor enumor.Vendor) (
 
 	result := make(map[string]*accountset.BaseRootAccount)
 	for i := uint64(0); i < total; i += uint64(core.DefaultMaxPageLimit) {
-		listReq := &core.ListWithoutFieldReq{
+		listReq := &core.ListReq{
 			Filter: filter,
 			Page: &core.BasePage{
 				Start: uint32(i),

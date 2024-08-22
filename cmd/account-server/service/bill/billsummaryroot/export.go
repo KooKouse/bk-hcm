@@ -35,7 +35,6 @@ import (
 	"hcm/pkg/logs"
 	"hcm/pkg/rest"
 	"hcm/pkg/tools/converter"
-	"hcm/pkg/tools/slice"
 
 	"github.com/TencentBlueKing/gopkg/conv"
 )
@@ -171,26 +170,4 @@ func toRawData(kt *kit.Kit, details []*dsbillapi.BillSummaryRootResult, accountM
 		data = append(data, fields)
 	}
 	return data, nil
-}
-
-func (s *service) listRootAccount(kt *kit.Kit, accountIDs []string) (map[string]*accountset.BaseRootAccount, error) {
-	accountIDs = slice.Unique(accountIDs)
-	if len(accountIDs) == 0 {
-		return nil, nil
-	}
-	result := make(map[string]*accountset.BaseRootAccount, len(accountIDs))
-	for _, ids := range slice.Split(accountIDs, int(core.DefaultMaxPageLimit)) {
-		listReq := &core.ListWithoutFieldReq{
-			Filter: tools.ExpressionAnd(tools.RuleIn("id", ids)),
-			Page:   core.NewDefaultBasePage(),
-		}
-		tmpResult, err := s.client.DataService().Global.RootAccount.List(kt, listReq)
-		if err != nil {
-			return nil, err
-		}
-		for _, item := range tmpResult.Details {
-			result[item.ID] = item
-		}
-	}
-	return result, nil
 }
