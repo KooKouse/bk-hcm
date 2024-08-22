@@ -36,8 +36,8 @@ import (
 type MainAccountSummaryListReq struct {
 	BillYear  int                `json:"bill_year" validate:"required"`
 	BillMonth int                `json:"bill_month" validate:"required"`
-	Filter    *filter.Expression `json:"filter" validate:"omitempty"`
-	Page      *core.BasePage     `json:"page" validate:"omitempty"`
+	Filter    *filter.Expression `json:"filter" validate:"required"`
+	Page      *core.BasePage     `json:"page" validate:"required"`
 }
 
 // Validate ...
@@ -71,9 +71,9 @@ type MainAccountSummaryListResult struct {
 
 // MainAccountSummaryResult main account summary get result
 type MainAccountSummaryResult struct {
-	bill.BillSummaryMainResult
-	MainAccountCloudID   string `json:"main_account_cloud_id" validate:"required"`
-	MainAccountCloudName string `json:"main_account_cloud_name" validate:"required"`
+	*bill.BillSummaryMainResult
+	MainAccountName string `json:"main_account_name"`
+	RootAccountName string `json:"root_account_name"`
 }
 
 // MainAccountSummaryExportReq export request for main account summary

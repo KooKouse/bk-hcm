@@ -17,9 +17,14 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package dailysummary
+// Package constant definition and assignment of various constants
+package constant
 
-import (
-	// register gcp puller
-	_ "hcm/cmd/account-server/logics/bill/puller/gcp"
+const (
+	// MaxRetries maximum number of retries
+	MaxRetries = 300
+	// MinRetryInterval maximum retry interval
+	MinRetryInterval = 200
+	// MaxRetryInterval minimum retry interval
+	MaxRetryInterval = 800
 )

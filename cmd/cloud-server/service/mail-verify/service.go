@@ -17,8 +17,47 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package bill
+package mailverify
 
 import (
-	_ "hcm/cmd/account-server/logics/bill/puller/huawei"
+	"net/http"
+
+	etcd3 "go.etcd.io/etcd/client/v3"
+	"hcm/cmd/cloud-server/service/capability"
+	"hcm/pkg/cc"
+	"hcm/pkg/rest"
+	"hcm/pkg/thirdparty/api-gateway/cmsi"
 )
+
+// MVSvc maile verification server
+var MVSvc *MailVerifySvc
+
+// InitEmailService initial the email service
+func InitEmailService(c *capability.Capability) {
+	config := cc.CloudServer().Service
+	etcdCfg, err := config.Etcd.ToConfig()
+	if err != nil {
+		return
+	}
+	etcdCli, err := etcd3.New(etcdCfg)
+	if err != nil {
+		return
+	}
+
+	svc := &MailVerifySvc{
+		CmsiClient: c.CmsiCli,
+		EtcdClient: etcdCli,
+	}
+	MVSvc = svc
+
+	h := rest.NewHandler()
+	h.Add("SendVerifyCode", http.MethodPost, "/mail/send_code", svc.SendVerifyCode)
+	h.Add("VerificationCode", http.MethodPost, "/mail/verify_code", svc.Verification)
+	h.Load(c.WebService)
+}
+
+// MailVerifySvc mail verification service
+type MailVerifySvc struct {
+	EtcdClient *etcd3.Client
+	CmsiClient cmsi.Client
+}

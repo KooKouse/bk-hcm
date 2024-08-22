@@ -24,6 +24,7 @@ import (
 
 	"hcm/pkg/api/core"
 	billcore "hcm/pkg/api/core/bill"
+	"hcm/pkg/api/data-service/bill"
 	"hcm/pkg/criteria/constant"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/criteria/validator"
@@ -85,6 +86,15 @@ type RootAccountSummarySumResult struct {
 	Count   uint64                                             `json:"count"`
 	CostMap map[enumor.CurrencyCode]*billcore.CostWithCurrency `json:"cost_map"`
 }
+
+// BillSummaryRootResult ...
+type BillSummaryRootResult struct {
+	*bill.BillSummaryRootResult
+	RootAccountName string `json:"root_account_name" `
+}
+
+// BillSummaryRootListResult ...
+type BillSummaryRootListResult = core.ListResultT[BillSummaryRootResult]
 
 // RootAccountSummaryExportReq ...
 type RootAccountSummaryExportReq struct {
