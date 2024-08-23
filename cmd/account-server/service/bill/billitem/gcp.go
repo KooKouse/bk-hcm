@@ -80,7 +80,7 @@ func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 
 	return &bill.FileDownloadResp{
 		ContentTypeStr:        "text/csv",
-		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, defaultExportFilename),
+		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, generateFilename(enumor.Gcp)),
 		Buffer:                buff,
 	}, nil
 }

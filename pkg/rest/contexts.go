@@ -20,10 +20,12 @@
 package rest
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"strconv"
 
 	"hcm/pkg/criteria/constant"
@@ -140,15 +142,39 @@ func (c *Contexts) WithStatusCode(statusCode int) *Contexts {
 func (c *Contexts) respFile(resp FileDownloadResp) {
 	c.resp.AddHeader("Content-Type", resp.ContentType())
 	c.resp.AddHeader("Content-Disposition", resp.ContentDisposition())
-	bytesStream, err := io.ReadAll(resp.Reader())
-	if err != nil {
-		logs.ErrorDepthf(1, "do response failed, err: %s, rid: %s", err.Error(), c.Kit.Rid)
-		return
+
+	// 使用bufio.NewReader创建一个新的Reader，用于流式读取
+	reader := bufio.NewReader(resp.Reader())
+
+	var buffer [4096]byte // 定义一个4096字节的缓冲区，大小可以根据实际情况调整
+	for {
+		// 从reader中读取数据到缓冲区
+		n, err := reader.Read(buffer[:cap(buffer)])
+		if err != nil {
+			if err == io.EOF {
+				// 到达文件末尾，退出循环
+				break
+			}
+			// 读取数据发生错误，记录日志并返回
+			logs.ErrorDepthf(1, "read file failed, err: %s, rid: %s", err.Error(), c.Kit.Rid)
+			return
+		}
+
+		// 将缓冲区中的数据写入HTTP响应
+		_, writeErr := c.resp.ResponseWriter.Write(buffer[:n])
+		if writeErr != nil {
+			// 写入响应时发生错误，记录日志并返回
+			logs.ErrorDepthf(1, "write response failed, err: %s, rid: %s", writeErr.Error(), c.Kit.Rid)
+			return
+		}
+		if f, ok := c.resp.ResponseWriter.(http.Flusher); ok {
+			f.Flush()
+		}
 	}
-	_, err = c.resp.ResponseWriter.Write(bytesStream)
-	if err != nil {
-		logs.ErrorDepthf(1, "do response failed, err: %s, rid: %s", err.Error(), c.Kit.Rid)
-		return
+
+	// 如果使用HTTP/1.1协议并且没有发送Content-Length头，可能需要调用Flush以确保数据被发送
+	if f, ok := c.resp.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
 	}
 }
 

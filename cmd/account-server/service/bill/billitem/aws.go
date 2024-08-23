@@ -75,7 +75,7 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 
 	return &bill.FileDownloadResp{
 		ContentTypeStr:        "text/csv",
-		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, defaultExportFilename),
+		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, generateFilename(enumor.Aws)),
 		Buffer:                buff,
 	}, nil
 }

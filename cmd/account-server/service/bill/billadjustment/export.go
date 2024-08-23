@@ -2,6 +2,7 @@ package billadjustment
 
 import (
 	"fmt"
+	"time"
 
 	"hcm/cmd/account-server/logics/bill/export"
 	"hcm/pkg/api/account-server/bill"
@@ -23,7 +24,7 @@ import (
 )
 
 const (
-	defaultExportFilename = "bill_adjustment_item.csv"
+	defaultExportFilename = "bill_adjustment_item-%s.csv"
 )
 
 // ExportBillAdjustmentItem 查询调账明细
@@ -85,9 +86,13 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 
 	return &bill.FileDownloadResp{
 		ContentTypeStr:        "text/csv",
-		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, defaultExportFilename),
+		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, generateFilename()),
 		Buffer:                buf,
 	}, nil
+}
+
+func generateFilename() string {
+	return fmt.Sprintf(defaultExportFilename, time.Now().Format("2006-01-02"))
 }
 
 func (b *billAdjustmentSvc) fetchBillAdjustmentItem(kt *kit.Kit, req *bill.AdjustmentItemExportReq) (

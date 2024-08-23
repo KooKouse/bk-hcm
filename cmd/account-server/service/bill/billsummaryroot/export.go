@@ -21,6 +21,7 @@ package billsummaryroot
 
 import (
 	"fmt"
+	"time"
 
 	"hcm/cmd/account-server/logics/bill/export"
 	asbillapi "hcm/pkg/api/account-server/bill"
@@ -40,7 +41,7 @@ import (
 )
 
 const (
-	defaultExportFilename = "bill_summary_root.csv"
+	defaultExportFilename = "bill_summary_root-%s.csv"
 )
 
 // ExportRootAccountSummary export root account summary with options
@@ -90,9 +91,13 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 	}
 	return &asbillapi.FileDownloadResp{
 		ContentTypeStr:        "text/csv",
-		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, defaultExportFilename),
+		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, generateFileName()),
 		Buffer:                buf,
 	}, nil
+}
+
+func generateFileName() string {
+	return fmt.Sprintf(defaultExportFilename, time.Now().Format("2006-01-02"))
 }
 
 func (s *service) fetchRootAccountSummary(cts *rest.Contexts, req *asbillapi.RootAccountSummaryExportReq) (

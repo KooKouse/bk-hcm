@@ -21,6 +21,7 @@ package billitem
 
 import (
 	"fmt"
+	"time"
 
 	"hcm/pkg/api/account-server/bill"
 	"hcm/pkg/api/core"
@@ -38,7 +39,7 @@ import (
 )
 
 const (
-	defaultExportFilename = "bill_item.csv"
+	defaultExportFilename = "bill_item-%s-%s.csv"
 )
 
 // ExportBillItems 导出账单明细
@@ -196,4 +197,8 @@ func (b *billItemSvc) fetchAccountBizInfo(kt *kit.Kit, vendor enumor.Vendor) (
 		return nil, nil, nil, err
 	}
 	return rootAccountMap, mainAccountMap, bizNameMap, nil
+}
+
+func generateFilename(vendor enumor.Vendor) string {
+	return fmt.Sprintf(defaultExportFilename, vendor, time.Now().Format("2006-01-02"))
 }

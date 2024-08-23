@@ -111,7 +111,7 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 
 	return &bill.FileDownloadResp{
 		ContentTypeStr:        "text/csv",
-		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, defaultExportFilename),
+		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, generateFilename(enumor.HuaWei)),
 		Buffer:                buff,
 	}, nil
 }

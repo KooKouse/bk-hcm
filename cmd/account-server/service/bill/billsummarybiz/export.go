@@ -2,6 +2,7 @@ package billsummarybiz
 
 import (
 	"fmt"
+	"time"
 
 	"hcm/cmd/account-server/logics/bill/export"
 	"hcm/pkg/api/account-server/bill"
@@ -20,7 +21,7 @@ import (
 )
 
 const (
-	defaultExportFilename = "bill_summary_biz.csv"
+	defaultExportFilename = "bill_summary_biz-%s.csv"
 )
 
 // ExportBizSummary export biz summary with options
@@ -71,9 +72,13 @@ func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 
 	return &bill.FileDownloadResp{
 		ContentTypeStr:        "text/csv",
-		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, defaultExportFilename),
+		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, generateFilename()),
 		Buffer:                buf,
 	}, nil
+}
+
+func generateFilename() string {
+	return fmt.Sprintf(defaultExportFilename, time.Now().Format("2006-01-02"))
 }
 
 func toRawData(kt *kit.Kit, details []*billproto.BillSummaryBizResult, bizMap map[int64]string) ([][]string, error) {
