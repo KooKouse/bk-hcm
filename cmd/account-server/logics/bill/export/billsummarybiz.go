@@ -2,9 +2,6 @@ package export
 
 import "hcm/pkg/logs"
 
-// []string{"运营产品ID", "运营产品名称", "已确认账单人民币（元）", "已确认账单美金（美元）",
-//		"当前账单人民币（元）", "当前账单美金（美元）"}
-
 // BillSummaryBizTableHeader 账单调整导出表头
 var BillSummaryBizTableHeader []string
 

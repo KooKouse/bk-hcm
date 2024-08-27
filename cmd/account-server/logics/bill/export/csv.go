@@ -30,10 +30,14 @@ import (
 	"hcm/pkg/logs"
 )
 
+var (
+	bomHeader = []byte{0xEF, 0xBB, 0xBF}
+)
+
 // NewCsvWriter ...
 func NewCsvWriter(kt *kit.Kit, writer io.Writer) (*csv.Writer, error) {
 	// 写入BOM头, 兼容windows excel打开csv文件时中文乱码
-	_, err := writer.Write([]byte{0xEF, 0xBB, 0xBF})
+	_, err := writer.Write(bomHeader)
 	if err != nil {
 		logs.Errorf("write BOM failed, err: %v, rid: %s", err, kt.Rid)
 		return nil, err
