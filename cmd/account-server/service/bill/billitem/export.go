@@ -83,10 +83,6 @@ func (b *billItemSvc) ExportBillItems(cts *rest.Contexts) (any, error) {
 	}
 }
 
-func commonGetHeader() []string {
-	return []string{"站点类型", "核算年月", "业务名称", "一级帐号名称", "二级帐号名称", "地域"}
-}
-
 func (b *billItemSvc) getExchangeRate(kt *kit.Kit, year, month int) (*decimal.Decimal, error) {
 	// 获取汇率
 	listReq := &core.ListReq{
@@ -200,5 +196,5 @@ func (b *billItemSvc) fetchAccountBizInfo(kt *kit.Kit, vendor enumor.Vendor) (
 }
 
 func generateFilename(vendor enumor.Vendor) string {
-	return fmt.Sprintf(defaultExportFilename, vendor, time.Now().Format("2006-01-02"))
+	return fmt.Sprintf(defaultExportFilename, vendor, time.Now().Format("2006-01-02-15_04_05"))
 }

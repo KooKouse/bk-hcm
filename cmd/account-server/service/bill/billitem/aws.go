@@ -45,7 +45,18 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 		return nil, err
 	}
 
-	buff, writer := export.NewCsvWriter()
+	filename := generateFilename(enumor.Aws)
+	filepath, writer, closeFunc, err := export.CreateWriterByFileName(kt, filename)
+	defer func() {
+		if closeFunc != nil {
+			closeFunc()
+		}
+	}()
+	if err != nil {
+		logs.Errorf("create writer failed: %v, rid: %s", err, kt.Rid)
+		return nil, err
+	}
+
 	if err = writer.Write(export.AwsBillItemHeaders); err != nil {
 		logs.Errorf("csv write header failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
@@ -65,6 +76,7 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 			logs.Errorf("csv write data failed: %v, rid: %s", err, kt.Rid)
 			return err
 		}
+
 		return nil
 	}
 	err = b.fetchAwsBillItems(kt, req, convFunc)
@@ -75,8 +87,8 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 
 	return &bill.FileDownloadResp{
 		ContentTypeStr:        "text/csv",
-		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, generateFilename(enumor.Aws)),
-		Buffer:                buff,
+		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, filename),
+		FilePath:              filepath,
 	}, nil
 }
 

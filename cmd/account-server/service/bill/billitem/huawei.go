@@ -81,7 +81,17 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 		return nil, err
 	}
 
-	buff, writer := export.NewCsvWriter()
+	filename := generateFilename(enumor.HuaWei)
+	filepath, writer, closeFunc, err := export.CreateWriterByFileName(kt, filename)
+	defer func() {
+		if closeFunc != nil {
+			closeFunc()
+		}
+	}()
+	if err != nil {
+		logs.Errorf("create writer failed: %v, rid: %s", err, kt.Rid)
+		return nil, err
+	}
 	if err = writer.Write(export.HuaweiBillItemHeaders); err != nil {
 		logs.Errorf("csv write header failed: %v, rid: %s", err, kt.Rid)
 		return nil, err
@@ -111,8 +121,8 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 
 	return &bill.FileDownloadResp{
 		ContentTypeStr:        "text/csv",
-		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, generateFilename(enumor.HuaWei)),
-		Buffer:                buff,
+		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, filename),
+		FilePath:              filepath,
 	}, nil
 }
 

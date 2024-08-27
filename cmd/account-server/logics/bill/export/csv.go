@@ -20,31 +20,44 @@
 package export
 
 import (
-	"bytes"
 	"encoding/csv"
 	"fmt"
+	"io"
+	"os"
+
+	"hcm/pkg/criteria/constant"
+	"hcm/pkg/kit"
+	"hcm/pkg/logs"
 )
 
 // NewCsvWriter ...
-func NewCsvWriter() (*bytes.Buffer, *csv.Writer) {
-	var buffer bytes.Buffer
-	// 写入BOM头, 兼容windows excel打开csv文件时中午乱码
-	buffer.Write([]byte{0xEF, 0xBB, 0xBF})
-	return &buffer, csv.NewWriter(&buffer)
+func NewCsvWriter(kt *kit.Kit, writer io.Writer) (*csv.Writer, error) {
+	// 写入BOM头, 兼容windows excel打开csv文件时中文乱码
+	_, err := writer.Write([]byte{0xEF, 0xBB, 0xBF})
+	if err != nil {
+		logs.Errorf("write BOM failed, err: %v, rid: %s", err, kt.Rid)
+		return nil, err
+	}
+	return csv.NewWriter(writer), nil
 }
 
-// GenerateCSV 生成csv内容
-func GenerateCSV(data [][]string) (*bytes.Buffer, error) {
-	// 创建CSV文件的缓冲区
-	var buffer bytes.Buffer
-	// 写入BOM头, 兼容windows excel打开csv文件时中午乱码
-	buffer.Write([]byte{0xEF, 0xBB, 0xBF})
-	csvWriter := csv.NewWriter(&buffer)
-	err := csvWriter.WriteAll(data)
-	if err != nil {
-		return nil, fmt.Errorf("write record to csv failed, err %s", err.Error())
+// CreateWriterByFileName ...
+func CreateWriterByFileName(kt *kit.Kit, filename string) (filepath string, writer *csv.Writer, closeFunc func() error, err error) {
+	if err := os.MkdirAll(constant.TmpResourcePath, 0600); err != nil {
+		logs.Errorf("mkdir failed: %v, rid: %s", err, kt.Rid)
+		return "", nil, nil, err
 	}
-	// 刷新缓冲区，确保所有记录都写入
-	csvWriter.Flush()
-	return &buffer, nil
+	filepath = fmt.Sprintf("%s/%s", constant.TmpResourcePath, filename)
+	file, err := os.Create(filepath)
+	if err != nil {
+		logs.Errorf("create file failed: %v, filepath: %s,rid: %s", err, filepath, kt.Rid)
+		return "", nil, file.Close, err
+	}
+	writer, err = NewCsvWriter(kt, file)
+	if err != nil {
+		logs.Errorf("new csv writer failed: %v, rid: %s", err, kt.Rid)
+		return "", nil, file.Close, err
+	}
+
+	return filepath, writer, file.Close, nil
 }

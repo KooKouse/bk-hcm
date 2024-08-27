@@ -22,7 +22,6 @@ package bill
 import (
 	"encoding/json"
 	"errors"
-	"io"
 
 	"hcm/pkg/api/core"
 	"hcm/pkg/api/core/bill"
@@ -214,7 +213,7 @@ type AdjustmentItemSumResult struct {
 type FileDownloadResp struct {
 	ContentTypeStr        string
 	ContentDispositionStr string
-	Buffer                io.Reader
+	FilePath              string
 }
 
 // ContentType ...
@@ -227,7 +226,7 @@ func (f *FileDownloadResp) ContentDisposition() string {
 	return f.ContentDispositionStr
 }
 
-// Reader return file reader.
-func (f *FileDownloadResp) Reader() io.Reader {
-	return f.Buffer
+// Filepath return file path.
+func (f *FileDownloadResp) Filepath() string {
+	return f.FilePath
 }

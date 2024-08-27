@@ -70,29 +70,42 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 		return nil, err
 	}
 
-	data := make([][]string, 0, len(result)+1)
-	data = append(data, export.BillAdjustmentTableHeader)
+	filename := generateFilename()
+	filepath, writer, closeFunc, err := export.CreateWriterByFileName(cts.Kit, filename)
+	defer func() {
+		if closeFunc != nil {
+			closeFunc()
+		}
+	}()
+	if err != nil {
+		logs.Errorf("create writer failed: %v, rid: %s", err, cts.Kit.Rid)
+		return nil, err
+	}
+
+	if err := writer.Write(export.BillAdjustmentTableHeader); err != nil {
+		logs.Errorf("write header failed: %v, rid: %s", err, cts.Kit.Rid)
+		return nil, err
+	}
+
 	table, err := toRawData(cts.Kit, result, mainAccountMap, bizMap)
 	if err != nil {
 		logs.Errorf("convert to raw data error: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
-	data = append(data, table...)
-	buf, err := export.GenerateCSV(data)
-	if err != nil {
-		logs.Errorf("generate csv failed, err: %v, rid: %s", err, cts.Kit.Rid)
+	if err := writer.WriteAll(table); err != nil {
+		logs.Errorf("write data failed: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
 	return &bill.FileDownloadResp{
 		ContentTypeStr:        "text/csv",
-		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, generateFilename()),
-		Buffer:                buf,
+		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, filename),
+		FilePath:              filepath,
 	}, nil
 }
 
 func generateFilename() string {
-	return fmt.Sprintf(defaultExportFilename, time.Now().Format("2006-01-02"))
+	return fmt.Sprintf(defaultExportFilename, time.Now().Format("2006-01-02-15_04_05"))
 }
 
 func (b *billAdjustmentSvc) fetchBillAdjustmentItem(kt *kit.Kit, req *bill.AdjustmentItemExportReq) (

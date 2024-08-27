@@ -26,6 +26,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strconv"
 
 	"hcm/pkg/criteria/constant"
@@ -143,8 +144,24 @@ func (c *Contexts) respFile(resp FileDownloadResp) {
 	c.resp.AddHeader("Content-Type", resp.ContentType())
 	c.resp.AddHeader("Content-Disposition", resp.ContentDisposition())
 
+	filepath := resp.Filepath()
+	file, err := os.Open(filepath)
+	defer func() {
+		// Delete tmp file
+		err := os.Remove(filepath)
+		if err != nil {
+			logs.ErrorDepthf(1, "remove file failed, filepath: %s, err: %s, rid: %s",
+				filepath, err.Error(), c.Kit.Rid)
+			return
+		}
+	}()
+	defer file.Close()
+	if err != nil {
+		logs.ErrorDepthf(1, "open file failed, err: %s, rid: %s", err.Error(), c.Kit.Rid)
+		return
+	}
 	// 使用bufio.NewReader创建一个新的Reader，用于流式读取
-	reader := bufio.NewReader(resp.Reader())
+	reader := bufio.NewReader(file)
 
 	var buffer [4096]byte // 定义一个4096字节的缓冲区，大小可以根据实际情况调整
 	for {
