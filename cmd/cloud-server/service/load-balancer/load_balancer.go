@@ -132,11 +132,6 @@ func bizService(h *rest.Handler, svc *lbSvc) {
 	h.Add("DeleteBizListener", http.MethodDelete, "/listeners/batch", svc.DeleteBizListener)
 	h.Add("UpdateBizDomainAttr", http.MethodPatch, "/listeners/{lbl_id}/domains", svc.UpdateBizDomainAttr)
 
-	bizURLRuleService(h, svc)
-	bizSopService(h, svc)
-}
-
-func bizURLRuleService(h *rest.Handler, svc *lbSvc) {
 	// 规则
 	h.Add("GetBizTCloudUrlRule", http.MethodGet,
 		"/vendors/tcloud/listeners/{lbl_id}/rules/{rule_id}", svc.GetBizTCloudUrlRule)
@@ -152,9 +147,7 @@ func bizURLRuleService(h *rest.Handler, svc *lbSvc) {
 		"/vendors/tcloud/listeners/{lbl_id}/rules/batch", svc.BatchDeleteBizTCloudUrlRule)
 	h.Add("BatchDeleteBizTCloudUrlRuleByDomain", http.MethodDelete,
 		"/vendors/tcloud/listeners/{lbl_id}/rules/by/domains/batch", svc.BatchDeleteBizTCloudUrlRuleByDomain)
-}
 
-func bizSopService(h *rest.Handler, svc *lbSvc) {
 	// 标准运维
 	h.Add("BatchBizAddTargetGroupRS", http.MethodPost,
 		"/sops/target_groups/targets/create", svc.BatchBizAddTargetGroupRS)

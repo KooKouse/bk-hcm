@@ -588,8 +588,9 @@ type TargetGroupQueryItemForRsOnline struct {
 
 // Validate req
 func (req *TargetGroupQueryItemForRsOnline) Validate() error {
-	if err := req.Protocol.Validate(); err != nil {
-		return err
+	if req.Protocol != enumor.HttpProtocol && req.Protocol != enumor.HttpsProtocol &&
+		req.Protocol != enumor.TcpProtocol && req.Protocol != enumor.UdpProtocol {
+		return fmt.Errorf("unspoort protocol: %s", req.Protocol)
 	}
 	if len(req.RsType) != 0 {
 		if req.RsType != "CVM" && req.RsType != "ENI" {

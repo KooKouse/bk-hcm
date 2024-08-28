@@ -19,10 +19,7 @@
 
 package enumor
 
-import (
-	"errors"
-	"fmt"
-)
+import "errors"
 
 // RuleType 负载均衡类型
 type RuleType string
@@ -75,15 +72,6 @@ const (
 	TcpSslProtocol ProtocolType = "TCP_SSL"
 	QuicProtocol   ProtocolType = "QUIC"
 )
-
-// Validate ...
-func (p ProtocolType) Validate() error {
-	if p != HttpProtocol && p != HttpsProtocol &&
-		p != TcpProtocol && p != UdpProtocol {
-		return fmt.Errorf("unspoort protocol: %s", p)
-	}
-	return nil
-}
 
 // IsLayer7Protocol 是否7层规则类型
 func (p ProtocolType) IsLayer7Protocol() bool {

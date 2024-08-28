@@ -106,17 +106,56 @@ func (svc *lbSvc) buildCreateTCloudTarget(kt *kit.Kit, body json.RawMessage, acc
 	}
 
 	// 按照clb分组targetGroup
-	lbTgsMap, err := svc.iterateTargetGroupGroupByCLB(kt, tgIDsMap)
-	if err != nil {
-		logs.Errorf("iterate target group group by clb failed, err: %v, rid: %s, tgIDsMap: %v",
-			err, kt.Rid, tgIDsMap)
-		return nil, err
+	lbTgsMap := make(map[string][]string)
+	for _, tgIDs := range tgIDsMap {
+		for _, tgID := range tgIDs {
+			// 根据目标组ID，获取目标组绑定的监听器、规则列表
+			ruleRelReq := &core.ListReq{
+				Filter: tools.EqualExpression("target_group_id", tgID),
+				Page:   core.NewDefaultBasePage(),
+			}
+			for {
+				listRuleRelResult, err := svc.client.DataService().Global.LoadBalancer.ListTargetGroupListenerRel(kt, ruleRelReq)
+				if err != nil {
+					logs.Errorf("list tcloud listener url rule failed, tgID: %s, err: %v, rid: %s", tgID, err, kt.Rid)
+					return nil, err
+				}
+
+				// 未绑定监听器及规则，分组到lbID=-1的默认组中
+				lbID := "-1"
+				if len(listRuleRelResult.Details) != 0 {
+					// 已经绑定了监听器及规则，归属某一clb
+					lbID = listRuleRelResult.Details[0].LbID
+				}
+				if _, exists := lbTgsMap[lbID]; !exists {
+					lbTgsMap[lbID] = make([]string, 0)
+				}
+				lbTgsMap[lbID] = append(lbTgsMap[lbID], tgID)
+
+				if uint(len(listRuleRelResult.Details)) < core.DefaultMaxPageLimit {
+					break
+				}
+				ruleRelReq.Page.Start += uint32(core.DefaultMaxPageLimit)
+			}
+		}
 	}
+
 	// 根据RS IP获取CVM的云端ID
-	instCloudIDMap, err := svc.parseInstIDMap(kt, accountID, vendor, req)
-	if err != nil {
-		logs.Errorf("parse inst id map failed, err: %v, req: %+v, rid: %s", err, req, kt.Rid)
-		return nil, err
+	instCloudIDMap := make(map[string]string)
+	switch req.RsType {
+	case enumor.CvmInstType:
+		instCloudIDMap, err = svc.parseTCloudRsIPForCvmInstIDMap(kt, accountID, vendor, req)
+		if err != nil {
+			logs.Errorf("parse tcloud rs ip for cvm inst id map faile, err: %v, req: %+v, rid : %s", err, req, kt.Rid)
+			return nil, err
+		}
+	case enumor.EniInstType:
+		// ENI也同样的去CVM表中查询，查不到则报错（表示没有找到ENI绑定的CVM）
+		instCloudIDMap, err = svc.parseTCloudRsIPForCvmInstIDMap(kt, accountID, vendor, req)
+		if err != nil {
+			logs.Errorf("parse tcloud rs ip for cvm inst id map faile, err: %v, req: %+v, rid : %s", err, req, kt.Rid)
+			return nil, err
+		}
 	}
 
 	// 获取到targets
@@ -141,16 +180,35 @@ func (svc *lbSvc) buildCreateTCloudTarget(kt *kit.Kit, body json.RawMessage, acc
 
 	flowStateResults := make([]*core.FlowStateResult, 0)
 	for lbID, lbTgIDs := range lbTgsMap {
-		addTargetJSON, err := buildTCloudTargetBatchCreateReq(lbTgIDs, targets)
+		params := &cslb.TCloudTargetBatchCreateReq{
+			TargetGroups: []*cslb.TCloudBatchAddTargetReq{},
+		}
+		for _, tgID := range lbTgIDs {
+			tmpTargetReq := &cslb.TCloudBatchAddTargetReq{
+				TargetGroupID: tgID,
+				Targets:       targets,
+			}
+
+			params.TargetGroups = append(params.TargetGroups, tmpTargetReq)
+		}
+
+		if len(params.TargetGroups) == 0 {
+			logs.Errorf("build sops tcloud add target params parse failed, err: %v, accountID: %s, lbTgIDs: %v, rid: %s",
+				err, accountID, lbTgIDs, kt.Rid)
+			return nil, errf.NewFromErr(errf.RecordNotFound, fmt.Errorf("build add target param parse empty"))
+		}
+
+		addTargetJSON, err := json.Marshal(params)
 		if err != nil {
-			logs.Errorf("build sops tcloud add target params failed, "+
-				"err: %v, lbID: %s, lbTgIDs: %v, targets: %v, rid: %s", err, lbID, lbTgIDs, targets, kt.Rid)
+			logs.Errorf("build sops tcloud add target params marshal failed, err: %v, params: %+v, rid: %s",
+				err, params, kt.Rid)
 			return nil, err
 		}
+
 		// 记录标准运维参数转换后的数据，方便排查问题
-		logs.Infof("build sops tcloud add target params jsonmarshal success,"+
-			" lbID: %s, lbTgIDs: %v, addTargetJSON: %s, rid: %s",
+		logs.Infof("build sops tcloud add target params jsonmarshal success, lbID: %s, lbTgIDs: %v, addTargetJSON: %s, rid: %s",
 			lbID, lbTgIDs, addTargetJSON, kt.Rid)
+
 		result, err := svc.buildAddTCloudTarget(kt, addTargetJSON, accountID)
 		if err != nil {
 			return nil, err
@@ -161,52 +219,8 @@ func (svc *lbSvc) buildCreateTCloudTarget(kt *kit.Kit, body json.RawMessage, acc
 		}
 		flowStateResults = append(flowStateResults, resultValue)
 	}
+
 	return flowStateResults, nil
-}
-
-func buildTCloudTargetBatchCreateReq(lbTgIDs []string, targets []*dataproto.TargetBaseReq) ([]byte, error) {
-	params := &cslb.TCloudTargetBatchCreateReq{
-		TargetGroups: []*cslb.TCloudBatchAddTargetReq{},
-	}
-	for _, tgID := range lbTgIDs {
-		tmpTargetReq := &cslb.TCloudBatchAddTargetReq{
-			TargetGroupID: tgID,
-			Targets:       targets,
-		}
-		params.TargetGroups = append(params.TargetGroups, tmpTargetReq)
-	}
-	if len(params.TargetGroups) == 0 {
-		return nil, errf.NewFromErr(errf.RecordNotFound, fmt.Errorf("build add target param parse empty"))
-	}
-	addTargetJSON, err := json.Marshal(params)
-	if err != nil {
-		return nil, err
-	}
-	return addTargetJSON, nil
-}
-
-func (svc *lbSvc) parseInstIDMap(kt *kit.Kit, accountID string, vendor enumor.Vendor,
-	req *cslb.TCloudSopsTargetBatchCreateReq) (map[string]string, error) {
-
-	switch req.RsType {
-	case enumor.CvmInstType:
-		instCloudIDMap, err := svc.parseTCloudRsIPForCvmInstIDMap(kt, accountID, vendor, req)
-		if err != nil {
-			logs.Errorf("parse tcloud rs ip for cvm inst id map faile, err: %v, req: %+v, rid : %s", err, req, kt.Rid)
-			return nil, err
-		}
-		return instCloudIDMap, nil
-	case enumor.EniInstType:
-		// ENI也同样的去CVM表中查询，查不到则报错（表示没有找到ENI绑定的CVM）
-		instCloudIDMap, err := svc.parseTCloudRsIPForCvmInstIDMap(kt, accountID, vendor, req)
-		if err != nil {
-			logs.Errorf("parse tcloud rs ip for cvm inst id map faile, err: %v, req: %+v, rid : %s", err, req, kt.Rid)
-			return nil, err
-		}
-		return instCloudIDMap, nil
-	default:
-		return nil, fmt.Errorf("unsupport rs type: %s", req.RsType)
-	}
 }
 
 // parseTCloudRsIPForCvmInstIDMap 解析标准运维参数-根据RS IP获取CVM的云端ID
@@ -236,8 +250,7 @@ func (svc *lbSvc) parseTCloudRsIPForCvmInstIDMap(kt *kit.Kit, accountID string, 
 		if len(cvmList.Details) != 1 {
 			// 一个rs_ip应对应唯一的一个CVM
 			logs.Errorf("one rs_ip: %s should correspond to one CVM, but %d were found", tmpRsIP, len(cvmList.Details))
-			return nil, errf.NewFromErr(errf.RecordNotFound, fmt.Errorf(
-				"one rs_ip: %s should correspond to one CVM, but %d were found", tmpRsIP, len(cvmList.Details)))
+			return nil, errf.NewFromErr(errf.RecordNotFound, fmt.Errorf("one rs_ip: %s should correspond to one CVM, but %d were found", tmpRsIP, len(cvmList.Details)))
 		}
 
 		// 记录当前temRsIP与CVMCloudID的映射关系
@@ -418,6 +431,7 @@ func (svc *lbSvc) parseSOpsVipAndVportForTgIDs(kt *kit.Kit, accountID string, ve
 		// 没有对应的筛选条件，表现为不筛选
 		return nil, nil
 	}
+
 	lbIDs := make([]string, 0)
 	tgIDs := make([]string, 0)
 	if len(vip) != 0 {
@@ -475,6 +489,7 @@ func (svc *lbSvc) parseSOpsVipAndVportForTgIDs(kt *kit.Kit, accountID string, ve
 		if uint(len(listLblResult.Details)) < core.DefaultMaxPageLimit {
 			break
 		}
+
 		lblReq.Page.Start += uint32(core.DefaultMaxPageLimit)
 	}
 	if len(lblIDs) == 0 {
@@ -482,17 +497,6 @@ func (svc *lbSvc) parseSOpsVipAndVportForTgIDs(kt *kit.Kit, accountID string, ve
 	}
 
 	// 查询符合的监听器与目标组绑定关系的列表
-	ids, err := svc.listTargetGroupListenerRel(kt, lblIDs)
-	if err != nil {
-		logs.Errorf("list target group listener rel failed, req: %+v, err: %v, rid: %s", lblIDs, err, kt.Rid)
-		return nil, err
-	}
-	tgIDs = append(tgIDs, ids...)
-	return slice.Unique(tgIDs), nil
-}
-
-// 查询符合的监听器与目标组绑定关系的列表
-func (svc *lbSvc) listTargetGroupListenerRel(kt *kit.Kit, lblIDs []string) ([]string, error) {
 	lblRuleReq := &core.ListReq{
 		Fields: []string{"target_group_id"},
 		Filter: tools.ExpressionAnd(
@@ -501,13 +505,10 @@ func (svc *lbSvc) listTargetGroupListenerRel(kt *kit.Kit, lblIDs []string) ([]st
 		),
 		Page: core.NewDefaultBasePage(),
 	}
-	tgIDs := make([]string, 0)
 	for {
 		lblRuleListResult, err := svc.client.DataService().Global.LoadBalancer.ListTargetGroupListenerRel(
 			kt, lblRuleReq)
 		if err != nil {
-			logs.Errorf("list target group listener rel failed, req: %+v, err: %v, rid: %s",
-				lblRuleReq, err, kt.Rid)
 			return nil, err
 		}
 		for _, ruleRelItem := range lblRuleListResult.Details {
@@ -522,7 +523,8 @@ func (svc *lbSvc) listTargetGroupListenerRel(kt *kit.Kit, lblIDs []string) ([]st
 		}
 		lblRuleReq.Page.Start += uint32(core.DefaultMaxPageLimit)
 	}
-	return tgIDs, nil
+
+	return slice.Unique(tgIDs), nil
 }
 
 // parseSOpsTargetParamsForRsOnline 解析标准运维参数-RS上线专属
@@ -544,8 +546,7 @@ func (svc *lbSvc) parseSOpsTargetParamsForRsOnline(kt *kit.Kit, accountID string
 
 		// 优化逻辑
 		// 1.Protocol、Domain、URL筛选出一批TargetGroup
-		protoDomainUrlTgIDs, err := svc.parseSOpsProtocolAndDomainAndUrlForTgIDs(
-			kt, accountID, vendor, item.Protocol, item.Domain, item.Url)
+		protoDomainUrlTgIDs, err := svc.parseSOpsProtocolAndDomainAndUrlForTgIDs(kt, accountID, vendor, item.Protocol, item.Domain, item.Url)
 		if err != nil {
 			logs.Errorf("parse protocol and domain and url for target group failed, accountID: %s, item: %+v, err: %v, rid: %s",
 				accountID, item, err, kt.Rid)
@@ -639,87 +640,64 @@ func (svc *lbSvc) parseSOpsProtocolAndDomainAndUrlForTgIDs(kt *kit.Kit, accountI
 		return nil, fmt.Errorf("protocol: %s not support", protocol)
 	}
 
-	var urlRuleSlice []corelb.TCloudLbUrlRule
-	var err error
+	urlRuleSlice := make([]corelb.TCloudLbUrlRule, 0)
 	urlRuleReq := &core.ListReq{
 		Filter: urlRuleFilter,
 		Page:   core.NewDefaultBasePage(),
 	}
 	switch vendor {
 	case enumor.TCloud:
-		urlRuleSlice, err = svc.listURLRule(kt, urlRuleReq)
-		if err != nil {
-			logs.Errorf("list url rule failed, req: %+v, err: %v, rid: %s", urlRuleReq, err, kt.Rid)
-			return nil, err
+		for {
+			urlRuleResult, err := svc.client.DataService().TCloud.LoadBalancer.ListUrlRule(kt, urlRuleReq)
+			if err != nil {
+				logs.Errorf("list url rule failed, req: %+v, err: %v, rid: %s", urlRuleReq, err, kt.Rid)
+				return nil, err
+			}
+			for _, urlRule := range urlRuleResult.Details {
+				urlRuleSlice = append(urlRuleSlice, urlRule)
+			}
+
+			if uint(len(urlRuleResult.Details)) < core.DefaultMaxPageLimit {
+				break
+			}
+			urlRuleReq.Page.Start += uint32(core.DefaultMaxPageLimit)
 		}
 	}
 
 	// 记录urlRule对应的目标组ID
-	var tgIDs []string
+	tgIDs := make([]string, 0)
 	switch vendor {
 	case enumor.TCloud:
-		tgIDs, err = svc.parseTargetGroupIDs(kt, protocol, urlRuleSlice)
-		if err != nil {
-			logs.Errorf("parse target group ids failed, urlRuleSlice: %+v, err: %v, rid: %s",
-				urlRuleSlice, err, kt.Rid)
-			return nil, err
+		for _, ruleItem := range urlRuleSlice {
+			if len(ruleItem.LblID) == 0 || len(ruleItem.TargetGroupID) == 0 {
+				continue
+			}
+			lblResult, err := svc.client.DataService().TCloud.LoadBalancer.GetListener(kt, ruleItem.LblID)
+			if err != nil {
+				return nil, err
+			}
+			if lblResult == nil {
+				continue
+			}
+			targetGroupResult, err := svc.client.DataService().TCloud.LoadBalancer.GetTargetGroup(kt, ruleItem.TargetGroupID)
+			if err != nil {
+				return nil, err
+			}
+			if targetGroupResult == nil {
+				continue
+			}
+
+			if lblResult.Protocol != targetGroupResult.Protocol {
+				return nil, fmt.Errorf("listener and target group protocols are different，listenrID: %s, targetGroupID: %s",
+					ruleItem.LblID, ruleItem.TargetGroupID)
+			}
+			if protocol != targetGroupResult.Protocol {
+				continue
+			}
+
+			tgIDs = append(tgIDs, ruleItem.TargetGroupID)
 		}
 	}
+
 	return slice.Unique(tgIDs), nil
-}
-
-func (svc *lbSvc) listURLRule(kt *kit.Kit, urlRuleReq *core.ListReq) ([]corelb.TCloudLbUrlRule, error) {
-	urlRuleSlice := make([]corelb.TCloudLbUrlRule, 0)
-	for {
-		urlRuleResult, err := svc.client.DataService().TCloud.LoadBalancer.ListUrlRule(kt, urlRuleReq)
-		if err != nil {
-			logs.Errorf("list url rule failed, req: %+v, err: %v, rid: %s", urlRuleReq, err, kt.Rid)
-			return nil, err
-		}
-		for _, urlRule := range urlRuleResult.Details {
-			urlRuleSlice = append(urlRuleSlice, urlRule)
-		}
-
-		if uint(len(urlRuleResult.Details)) < core.DefaultMaxPageLimit {
-			break
-		}
-		urlRuleReq.Page.Start += uint32(core.DefaultMaxPageLimit)
-	}
-	return urlRuleSlice, nil
-}
-
-func (svc *lbSvc) parseTargetGroupIDs(kt *kit.Kit, protocol enumor.ProtocolType,
-	urlRuleSlice []corelb.TCloudLbUrlRule) ([]string, error) {
-
-	tgIDs := make([]string, 0)
-	for _, ruleItem := range urlRuleSlice {
-		if len(ruleItem.LblID) == 0 || len(ruleItem.TargetGroupID) == 0 {
-			continue
-		}
-		lblResult, err := svc.client.DataService().TCloud.LoadBalancer.GetListener(kt, ruleItem.LblID)
-		if err != nil {
-			return nil, err
-		}
-		if lblResult == nil {
-			continue
-		}
-		targetGroupResult, err := svc.client.DataService().TCloud.LoadBalancer.GetTargetGroup(kt, ruleItem.TargetGroupID)
-		if err != nil {
-			return nil, err
-		}
-		if targetGroupResult == nil {
-			continue
-		}
-
-		if lblResult.Protocol != targetGroupResult.Protocol {
-			return nil, fmt.Errorf("listener and target group protocols are different，listenrID: %s, targetGroupID: %s",
-				ruleItem.LblID, ruleItem.TargetGroupID)
-		}
-		if protocol != targetGroupResult.Protocol {
-			continue
-		}
-		tgIDs = append(tgIDs, ruleItem.TargetGroupID)
-	}
-	return slice.Unique(tgIDs), nil
-
 }
