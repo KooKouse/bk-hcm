@@ -186,12 +186,12 @@ func toRawData(kt *kit.Kit, details []*billcore.AdjustmentItem, mainAccountMap m
 			Currency:        detail.Currency,
 			AdjustStatus:    enumor.BillAdjustmentStateNameMap[detail.State],
 		}
-		fields, err := table.GetHeaderFields()
+		values, err := table.GetHeaderValues()
 		if err != nil {
-			logs.Errorf("get header fields failed: %v, rid: %s, table: %v", err, kt.Rid, table)
+			logs.Errorf("get header fields failed, table: %v, error: %v, rid: %s", table, err, kt.Rid)
 			return nil, err
 		}
-		data = append(data, fields)
+		data = append(data, values)
 	}
 	return data, nil
 }

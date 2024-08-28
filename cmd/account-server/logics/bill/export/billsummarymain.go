@@ -31,7 +31,7 @@ type BillSummaryMainTable struct {
 }
 
 // GetHeaderFields ...
-func (b BillSummaryMainTable) GetHeaderFields() ([]string, error) {
+func (b BillSummaryMainTable) GetHeaderValues() ([]string, error) {
 	return parseHeaderFields(b)
 }
 

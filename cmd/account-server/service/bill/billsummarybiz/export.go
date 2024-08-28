@@ -104,7 +104,7 @@ func toRawData(kt *kit.Kit, details []*billproto.BillSummaryBizResult, bizMap ma
 			CurrentMonthRMBCost:       detail.CurrentMonthRMBCost.String(),
 			CurrentMonthCost:          detail.CurrentMonthCost.String(),
 		}
-		fields, err := table.GetHeaderFields()
+		fields, err := table.GetHeaderValues()
 		if err != nil {
 			logs.Errorf("get header fields failed: %v, rid: %s", err, kt.Rid)
 			return nil, err

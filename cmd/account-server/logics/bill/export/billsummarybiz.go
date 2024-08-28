@@ -26,7 +26,7 @@ type BillSummaryBizTable struct {
 }
 
 // GetHeaderFields ...
-func (b BillSummaryBizTable) GetHeaderFields() ([]string, error) {
+func (b BillSummaryBizTable) GetHeaderValues() ([]string, error) {
 	return parseHeaderFields(b)
 }
 

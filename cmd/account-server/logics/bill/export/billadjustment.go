@@ -31,7 +31,7 @@ type BillAdjustmentTable struct {
 }
 
 // GetHeaderFields ...
-func (b BillAdjustmentTable) GetHeaderFields() ([]string, error) {
+func (b BillAdjustmentTable) GetHeaderValues() ([]string, error) {
 	return parseHeaderFields(b)
 }
 

@@ -143,12 +143,12 @@ func convertAwsBillItems(kt *kit.Kit, items []*billapi.AwsBillItem, bizNameMap m
 			RMBCost:             item.Cost.Mul(*rate).String(),
 			Rate:                rate.String(),
 		}
-		fields, err := table.GetHeaderFields()
+		values, err := table.GetHeaderValues()
 		if err != nil {
-			logs.Errorf("get header fields failed: %v, rid: %s, table: %v", err, kt.Rid, table)
+			logs.Errorf("get header fields failed, table: %v, error: %v, rid: %s", err, kt.Rid, table)
 			return nil, err
 		}
-		result = append(result, fields)
+		result = append(result, values)
 	}
 	return result, nil
 }

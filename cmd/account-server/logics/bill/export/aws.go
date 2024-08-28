@@ -53,6 +53,6 @@ func (c AwsBillItemTable) GetHeaders() ([]string, error) {
 }
 
 // GetHeaderFields 获取表头对应的数据
-func (c AwsBillItemTable) GetHeaderFields() ([]string, error) {
+func (c AwsBillItemTable) GetHeaderValues() ([]string, error) {
 	return parseHeaderFields(c)
 }

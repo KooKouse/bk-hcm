@@ -118,7 +118,7 @@ func convertGcpBillItem(kt *kit.Kit, items []*billapi.GcpBillItem, bizNameMap ma
 			extension = &billapi.GcpRawBillItem{}
 		}
 
-		tmp := export.GcpBillItemTable{
+		table := export.GcpBillItemTable{
 			Site:                       string(mainAccount.Site),
 			AccountDate:                converter.PtrToVal[string](extension.Month),
 			BizName:                    bizName,
@@ -139,12 +139,12 @@ func convertGcpBillItem(kt *kit.Kit, items []*billapi.GcpBillItem, bizNameMap ma
 			RMBCost:                    item.Cost.Mul(*rate).String(),
 		}
 
-		fields, err := tmp.GetHeaderFields()
+		values, err := table.GetHeaderValues()
 		if err != nil {
-			logs.Errorf("get header fields failed: %v, rid: %s, table: %v", err, kt.Rid, fields)
+			logs.Errorf("get header fields failed, table: %v, error: %v, rid: %s", table, err, kt.Rid)
 			return nil, err
 		}
-		result = append(result, fields)
+		result = append(result, values)
 	}
 	return result, nil
 }
@@ -174,7 +174,8 @@ func (b *billItemSvc) fetchGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemReq
 				tools.RuleGreaterThan("id", lastID),
 			)
 			if err != nil {
-				logs.Errorf("[fetchGcpBillItems] build filter failed: %v, rid: %s, lastID: %s, filter: %v", err, kt.Rid, lastID, expr)
+				logs.Errorf("[fetchGcpBillItems] build filter failed: %v, rid: %s, lastID: %s, filter: %v",
+					err, kt.Rid, lastID, expr)
 				return err
 			}
 		}

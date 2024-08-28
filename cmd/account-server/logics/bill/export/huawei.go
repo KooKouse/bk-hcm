@@ -52,6 +52,6 @@ func (h HuaweiBillItemTable) GetHeaders() ([]string, error) {
 }
 
 // GetHeaderFields ...
-func (h HuaweiBillItemTable) GetHeaderFields() ([]string, error) {
+func (h HuaweiBillItemTable) GetHeaderValues() ([]string, error) {
 	return parseHeaderFields(h)
 }

@@ -179,7 +179,7 @@ func toRawData(kt *kit.Kit, details []*dsbillapi.BillSummaryRootResult, accountM
 			AdjustRMBCost:             detail.AdjustmentRMBCost.String(),
 			AdjustCost:                detail.AdjustmentCost.String(),
 		}
-		fields, err := table.GetHeaderFields()
+		fields, err := table.GetHeaderValues()
 		if err != nil {
 			logs.Errorf("get header fields failed: %v, rid: %s", err, kt.Rid)
 			return nil, err

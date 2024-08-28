@@ -32,7 +32,7 @@ type BillSummaryRootTable struct {
 }
 
 // GetHeaderFields ...
-func (b BillSummaryRootTable) GetHeaderFields() ([]string, error) {
+func (b BillSummaryRootTable) GetHeaderValues() ([]string, error) {
 	return parseHeaderFields(b)
 }
 

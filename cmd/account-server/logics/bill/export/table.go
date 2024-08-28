@@ -8,9 +8,9 @@ import (
 
 // Table excel表结构抽象
 type Table interface {
-	// GetHeaderFields 根据表头字段顺序解析数据
-	GetHeaderFields() ([]string, error)
-	// GetHeader 获取表头列
+	// GetHeaderValues 根据表头字段顺序解析数据
+	GetHeaderValues() ([]string, error)
+	// GetHeaders 获取表头列
 	GetHeaders() ([]string, error)
 }
 

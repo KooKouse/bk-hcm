@@ -150,7 +150,7 @@ func convertHuaweiBillItems(kt *kit.Kit, items []*billapi.HuaweiBillItem, bizNam
 			extension = &model.ResFeeRecordV2{}
 		}
 
-		var tmp = export.HuaweiBillItemTable{
+		var table = export.HuaweiBillItemTable{
 			Site:                 string(mainAccount.Site),
 			AccountDate:          fmt.Sprintf("%d%02d", item.BillYear, item.BillMonth),
 			BizName:              bizName,
@@ -176,12 +176,12 @@ func convertHuaweiBillItems(kt *kit.Kit, items []*billapi.HuaweiBillItem, bizNam
 			Cost:                 item.Cost.String(),
 			CostRMB:              item.Cost.Mul(*rate).String(),
 		}
-		fields, err := tmp.GetHeaderFields()
+		values, err := table.GetHeaderValues()
 		if err != nil {
-			logs.Errorf("get header fields failed: %v, rid: %s, table: %v", err, kt.Rid, fields)
+			logs.Errorf("get header fields failed, table: %v, error: %v, rid: %s", table, err, kt.Rid)
 			return nil, err
 		}
-		result = append(result, fields)
+		result = append(result, values)
 	}
 	return result, nil
 }

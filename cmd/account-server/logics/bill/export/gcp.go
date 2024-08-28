@@ -41,7 +41,7 @@ type GcpBillItemTable struct {
 }
 
 // GetHeaderFields ...
-func (g GcpBillItemTable) GetHeaderFields() ([]string, error) {
+func (g GcpBillItemTable) GetHeaderValues() ([]string, error) {
 	return parseHeaderFields(g)
 }
 
