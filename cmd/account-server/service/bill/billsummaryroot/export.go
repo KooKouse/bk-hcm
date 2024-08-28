@@ -76,8 +76,7 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 		return nil, err
 	}
 
-	filename := generateFileName()
-	filepath, writer, closeFunc, err := export.CreateWriterByFileName(cts.Kit, filename)
+	filename, filepath, writer, closeFunc, err := export.CreateWriterByFileName(cts.Kit, generateFileName())
 	defer func() {
 		if closeFunc != nil {
 			closeFunc()
@@ -102,7 +101,7 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 		return nil, err
 	}
 	return &asbillapi.FileDownloadResp{
-		ContentTypeStr:        "text/csv",
+		ContentTypeStr:        "application/octet-stream",
 		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, filename),
 		FilePath:              filepath,
 	}, nil

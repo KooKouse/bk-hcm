@@ -146,6 +146,6 @@ POST /api/v1/account/bills/main-account-summarys/export
 
 #### 导出成功结果示例
 
-Content-Type: text/csv
-Content-Disposition: attachment; filename="bill_summary_main.csv"
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="bill_summary_main.csv.zip"
 [二进制文件流]

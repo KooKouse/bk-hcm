@@ -51,8 +51,7 @@ func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 		return nil, err
 	}
 
-	filename := generateFilename(enumor.Gcp)
-	filepath, writer, closeFunc, err := export.CreateWriterByFileName(kt, filename)
+	filename, filepath, writer, closeFunc, err := export.CreateWriterByFileName(kt, generateFilename(enumor.Gcp))
 	defer func() {
 		if closeFunc != nil {
 			closeFunc()
@@ -89,7 +88,7 @@ func (b *billItemSvc) exportGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 	}
 
 	return &bill.FileDownloadResp{
-		ContentTypeStr:        "text/csv",
+		ContentTypeStr:        "application/octet-stream",
 		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, filename),
 		FilePath:              filepath,
 	}, nil

@@ -134,6 +134,6 @@ POST /api/v1/account/vendors/{vendor}/bills/items/export
 
 #### 导出成功结果示例
 
-Content-Type: text/csv
-Content-Disposition: attachment; filename="bill_item.csv"
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="bill_item.csv.zip"
 [二进制文件流]

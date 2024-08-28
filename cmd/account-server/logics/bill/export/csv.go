@@ -20,6 +20,7 @@
 package export
 
 import (
+	"archive/zip"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -46,22 +47,33 @@ func NewCsvWriter(kt *kit.Kit, writer io.Writer) (*csv.Writer, error) {
 }
 
 // CreateWriterByFileName ...
-func CreateWriterByFileName(kt *kit.Kit, filename string) (filepath string, writer *csv.Writer, closeFunc func() error, err error) {
+func CreateWriterByFileName(kt *kit.Kit, filename string) (
+	finalFilename, filepath string, writer *csv.Writer, closeFunc func() error, err error) {
+
 	if err := os.MkdirAll(cc.AccountServer().TmpFileDir, 0600); err != nil {
 		logs.Errorf("mkdir failed: %v, rid: %s", err, kt.Rid)
-		return "", nil, nil, err
+		return "", "", nil, nil, err
 	}
-	filepath = fmt.Sprintf("%s/%s", cc.AccountServer().TmpFileDir, filename)
+
+	finalFilename = fmt.Sprintf("%s.zip", filename)
+	filepath = fmt.Sprintf("%s/%s", cc.AccountServer().TmpFileDir, finalFilename)
 	file, err := os.Create(filepath)
 	if err != nil {
 		logs.Errorf("create file failed: %v, filepath: %s,rid: %s", err, filepath, kt.Rid)
-		return "", nil, file.Close, err
-	}
-	writer, err = NewCsvWriter(kt, file)
-	if err != nil {
-		logs.Errorf("new csv writer failed: %v, rid: %s", err, kt.Rid)
-		return "", nil, file.Close, err
+		return "", "", nil, file.Close, err
 	}
 
-	return filepath, writer, file.Close, nil
+	zipWriter := zip.NewWriter(file)
+	zipFile, err := zipWriter.Create(filename)
+	if err != nil {
+		return "", "", nil, zipWriter.Close, err
+	}
+
+	writer, err = NewCsvWriter(kt, zipFile)
+	if err != nil {
+		logs.Errorf("new csv writer failed: %v, rid: %s", err, kt.Rid)
+		return "", "", nil, zipWriter.Close, err
+	}
+
+	return finalFilename, filepath, writer, zipWriter.Close, nil
 }

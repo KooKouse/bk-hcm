@@ -81,8 +81,7 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 		return nil, err
 	}
 
-	filename := generateFilename(enumor.HuaWei)
-	filepath, writer, closeFunc, err := export.CreateWriterByFileName(kt, filename)
+	filename, filepath, writer, closeFunc, err := export.CreateWriterByFileName(kt, generateFilename(enumor.HuaWei))
 	defer func() {
 		if closeFunc != nil {
 			closeFunc()
@@ -120,7 +119,7 @@ func (b *billItemSvc) exportHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillIte
 	}
 
 	return &bill.FileDownloadResp{
-		ContentTypeStr:        "text/csv",
+		ContentTypeStr:        "application/octet-stream",
 		ContentDispositionStr: fmt.Sprintf(`attachment; filename="%s"`, filename),
 		FilePath:              filepath,
 	}, nil
