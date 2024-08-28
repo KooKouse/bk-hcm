@@ -40,7 +40,7 @@ type GcpBillItemTable struct {
 	RMBCost                    string `header:"人民币成本(元)"`
 }
 
-// GetHeaderFields ...
+// GetHeaderValues ...
 func (g GcpBillItemTable) GetHeaderValues() ([]string, error) {
 	return parseHeaderFields(g)
 }

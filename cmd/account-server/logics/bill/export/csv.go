@@ -25,7 +25,7 @@ import (
 	"io"
 	"os"
 
-	"hcm/pkg/criteria/constant"
+	"hcm/pkg/cc"
 	"hcm/pkg/kit"
 	"hcm/pkg/logs"
 )
@@ -47,11 +47,11 @@ func NewCsvWriter(kt *kit.Kit, writer io.Writer) (*csv.Writer, error) {
 
 // CreateWriterByFileName ...
 func CreateWriterByFileName(kt *kit.Kit, filename string) (filepath string, writer *csv.Writer, closeFunc func() error, err error) {
-	if err := os.MkdirAll(constant.TmpResourcePath, 0600); err != nil {
+	if err := os.MkdirAll(cc.AccountServer().TmpFileDir, 0600); err != nil {
 		logs.Errorf("mkdir failed: %v, rid: %s", err, kt.Rid)
 		return "", nil, nil, err
 	}
-	filepath = fmt.Sprintf("%s/%s", constant.TmpResourcePath, filename)
+	filepath = fmt.Sprintf("%s/%s", cc.AccountServer().TmpFileDir, filename)
 	file, err := os.Create(filepath)
 	if err != nil {
 		logs.Errorf("create file failed: %v, filepath: %s,rid: %s", err, filepath, kt.Rid)

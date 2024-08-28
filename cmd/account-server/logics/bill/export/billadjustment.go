@@ -30,7 +30,7 @@ type BillAdjustmentTable struct {
 	AdjustStatus    string `header:"调账状态"`
 }
 
-// GetHeaderFields ...
+// GetHeaderValues ...
 func (b BillAdjustmentTable) GetHeaderValues() ([]string, error) {
 	return parseHeaderFields(b)
 }

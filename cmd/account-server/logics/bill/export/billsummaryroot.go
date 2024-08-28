@@ -31,7 +31,7 @@ type BillSummaryRootTable struct {
 	AdjustCost                string `header:"调账美金（美元）"`
 }
 
-// GetHeaderFields ...
+// GetHeaderValues ...
 func (b BillSummaryRootTable) GetHeaderValues() ([]string, error) {
 	return parseHeaderFields(b)
 }

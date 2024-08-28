@@ -70,6 +70,9 @@ controller:
   rootAccountSummarySyncDuration:
   dailySummarySyncDuration:
 
+# tmp file dir, default: /tmp
+tmpFileDir: /tmp
+
 billAllocation:
   # aws saving plan allocation option
   awsSavingPlans:

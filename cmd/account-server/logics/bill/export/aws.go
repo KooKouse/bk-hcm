@@ -52,7 +52,7 @@ func (c AwsBillItemTable) GetHeaders() ([]string, error) {
 	return parseHeader(c)
 }
 
-// GetHeaderFields 获取表头对应的数据
+// GetHeaderValues 获取表头对应的数据
 func (c AwsBillItemTable) GetHeaderValues() ([]string, error) {
 	return parseHeaderFields(c)
 }

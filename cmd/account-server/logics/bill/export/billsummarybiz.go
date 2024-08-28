@@ -25,7 +25,7 @@ type BillSummaryBizTable struct {
 	CurrentMonthCost          string `header:"当前账单美金（美元）"`
 }
 
-// GetHeaderFields ...
+// GetHeaderValues ...
 func (b BillSummaryBizTable) GetHeaderValues() ([]string, error) {
 	return parseHeaderFields(b)
 }
