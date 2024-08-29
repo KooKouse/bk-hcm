@@ -6,7 +6,7 @@
 
 ### URL
 
-POST /api/v1/account/bills/root-account-summarys/export
+POST /api/v1/account/bills/root_account_summarys/export
 
 ### 输入参数
 
