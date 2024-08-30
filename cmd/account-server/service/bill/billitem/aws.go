@@ -80,7 +80,7 @@ func (b *billItemSvc) exportAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemRe
 	}
 	err = b.fetchAwsBillItems(kt, req, convFunc)
 	if err != nil {
-		logs.Errorf("fetch aws bill items for export failed, err: %v, rid: %s, req: %v", err, kt.Rid, req)
+		logs.Errorf("fetch aws bill items for export failed, req: %v, err: %v, rid: %s", req, err, kt.Rid)
 		return nil, err
 	}
 
@@ -144,7 +144,7 @@ func convertAwsBillItems(kt *kit.Kit, items []*billapi.AwsBillItem, bizNameMap m
 		}
 		values, err := table.GetHeaderValues()
 		if err != nil {
-			logs.Errorf("get header fields failed, table: %v, error: %v, rid: %s", err, kt.Rid, table)
+			logs.Errorf("get header fields failed, table: %v, error: %v, rid: %s", table, err, kt.Rid)
 			return nil, err
 		}
 		result = append(result, values)
@@ -202,6 +202,7 @@ func (b *billItemSvc) fetchAwsBillItems(kt *kit.Kit, req *bill.ExportBillItemReq
 			continue
 		}
 		if err = convertFunc(result.Details); err != nil {
+			logs.Errorf("convert aws bill item failed: %v, rid: %s", err, kt.Rid)
 			return err
 		}
 		lastID = result.Details[len(result.Details)-1].ID

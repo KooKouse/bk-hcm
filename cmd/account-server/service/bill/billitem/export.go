@@ -155,6 +155,7 @@ func (b *billItemSvc) listBiz(kt *kit.Kit) (map[int64]string, error) {
 	}
 	resp, err := b.esbClient.Cmdb().SearchBusiness(kt, params)
 	if err != nil {
+		logs.Errorf("call cmdb search business api failed, err: %v, rid: %s", err, kt.Rid)
 		return nil, fmt.Errorf("call cmdb search business api failed, err: %v", err)
 	}
 
@@ -179,7 +180,7 @@ func (b *billItemSvc) fetchAccountBizInfo(kt *kit.Kit, vendor enumor.Vendor) (
 	}
 	mainAccounts, err := b.listMainAccount(kt, vendor)
 	if err != nil {
-		logs.Errorf("fail to list main account, err: %v, rid: %s, vendor: %s", err, kt.Rid, vendor)
+		logs.Errorf("fail to list main account, vendor: %s, err: %v, rid: %s", vendor, err, kt.Rid)
 		return nil, nil, nil, err
 	}
 	mainAccountMap = make(map[string]*accountset.BaseMainAccount, len(mainAccounts))
@@ -189,7 +190,7 @@ func (b *billItemSvc) fetchAccountBizInfo(kt *kit.Kit, vendor enumor.Vendor) (
 
 	rootAccountMap, err = b.listRootAccount(kt, vendor)
 	if err != nil {
-		logs.Errorf("fail to list root account, err: %v, rid: %s, vendor: %s", err, kt.Rid, vendor)
+		logs.Errorf("fail to list root account, vendor: %s, err: %v, rid: %s", vendor, err, kt.Rid)
 		return nil, nil, nil, err
 	}
 	return rootAccountMap, mainAccountMap, bizNameMap, nil

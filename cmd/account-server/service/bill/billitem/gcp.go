@@ -173,8 +173,8 @@ func (b *billItemSvc) fetchGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemReq
 				tools.RuleGreaterThan("id", lastID),
 			)
 			if err != nil {
-				logs.Errorf("[fetchGcpBillItems] build filter failed: %v, rid: %s, lastID: %s, filter: %v",
-					err, kt.Rid, lastID, expr)
+				logs.Errorf("[fetchGcpBillItems] build filter failed, lastID: %s, filter: %v, error: %v, rid: %s",
+					lastID, expr, err, kt.Rid)
 				return err
 			}
 		}
@@ -198,6 +198,7 @@ func (b *billItemSvc) fetchGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemReq
 			continue
 		}
 		if err = convertFunc(result.Details); err != nil {
+			logs.Errorf("convert gcp bill item failed: %v, rid: %s", err, kt.Rid)
 			return err
 		}
 		lastID = result.Details[len(result.Details)-1].ID

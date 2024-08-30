@@ -1,3 +1,22 @@
+/*
+ * TencentBlueKing is pleased to support the open source community by making
+ * 蓝鲸智云 - 混合云管理平台 (BlueKing - Hybrid Cloud Management System) available.
+ * Copyright (C) 2024 THL A29 Limited,
+ * a Tencent company. All rights reserved.
+ * Licensed under the MIT License (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at http://opensource.org/licenses/MIT
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ *
+ * We undertake not to change the open source license (MIT license) applicable
+ *
+ * to the current version of the project delivered to anyone in the future.
+ */
+
 package billadjustment
 
 import (
@@ -46,7 +65,7 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 
 	result, err := b.fetchBillAdjustmentItem(cts.Kit, req)
 	if err != nil {
-		logs.Errorf("fetch bill adjustment item failed, err: %v, rid: %s, req: %v", err, cts.Kit.Rid, req)
+		logs.Errorf("fetch bill adjustment item failed, req: %v, err: %v, rid: %s", req, err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -66,7 +85,7 @@ func (b *billAdjustmentSvc) ExportBillAdjustmentItem(cts *rest.Contexts) (any, e
 	}
 	bizMap, err := b.listBiz(cts.Kit, bizIDs)
 	if err != nil {
-		logs.Errorf("list biz failed, err: %v, rid: %s, bizIDs: %v", err, cts.Kit.Rid, bizIDs)
+		logs.Errorf("list biz failed, bizIDs: %v, err: %v, rid: %s", bizIDs, err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -118,6 +137,7 @@ func (b *billAdjustmentSvc) fetchBillAdjustmentItem(kt *kit.Kit, req *bill.Adjus
 		var err error
 		expression, err = tools.And(req.Filter, expression)
 		if err != nil {
+			logs.Errorf("build filter expression failed, error: %v, rid: %s", err, kt.Rid)
 			return nil, err
 		}
 	}
@@ -200,30 +220,33 @@ func (b *billAdjustmentSvc) listBiz(kt *kit.Kit, ids []int64) (map[int64]string,
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	rules := []cmdb.Rule{
-		&cmdb.AtomRule{
-			Field:    "bk_biz_id",
-			Operator: cmdb.OperatorIn,
-			Value:    ids,
-		},
-	}
-	expression := &cmdb.QueryFilter{Rule: &cmdb.CombinedRule{Condition: "AND", Rules: rules}}
 
-	params := &cmdb.SearchBizParams{
-		BizPropertyFilter: expression,
-		Fields:            []string{"bk_biz_id", "bk_biz_name"},
-	}
-	resp, err := b.esbClient.Cmdb().SearchBusiness(kt, params)
-	if err != nil {
-		return nil, fmt.Errorf("call cmdb search business api failed, err: %v", err)
-	}
+	data := make(map[int64]string)
+	for _, split := range slice.Split(ids, int(core.DefaultMaxPageLimit)) {
+		rules := []cmdb.Rule{
+			&cmdb.AtomRule{
+				Field:    "bk_biz_id",
+				Operator: cmdb.OperatorIn,
+				Value:    split,
+			},
+		}
+		expression := &cmdb.QueryFilter{Rule: &cmdb.CombinedRule{Condition: "AND", Rules: rules}}
 
-	infos := resp.Info
-	data := make(map[int64]string, len(infos))
-	for _, biz := range infos {
-		data[biz.BizID] = biz.BizName
-	}
+		params := &cmdb.SearchBizParams{
+			BizPropertyFilter: expression,
+			Fields:            []string{"bk_biz_id", "bk_biz_name"},
+		}
+		resp, err := b.esbClient.Cmdb().SearchBusiness(kt, params)
+		if err != nil {
+			logs.Errorf("call cmdb search business api failed, err: %v, rid: %s", err, kt.Rid)
+			return nil, fmt.Errorf("call cmdb search business api failed, err: %v", err)
+		}
 
+		infos := resp.Info
+		for _, biz := range infos {
+			data[biz.BizID] = biz.BizName
+		}
+	}
 	return data, nil
 }
 
@@ -232,34 +255,16 @@ func (b *billAdjustmentSvc) listMainAccount(kt *kit.Kit, ids []string) (map[stri
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	expression, err := tools.And(tools.RuleIn("id", ids))
-	if err != nil {
-		return nil, err
-	}
 
-	listReq := &core.ListReq{
-		Filter: expression,
-		Page:   core.NewCountPage(),
-	}
-	details, err := b.client.DataService().Global.MainAccount.List(kt, listReq)
-	if err != nil {
-		return nil, err
-	}
-	total := details.Count
-
-	result := make(map[string]*accountset.BaseMainAccount, total)
-	for offset := uint64(0); offset < total; offset = offset + uint64(core.DefaultMaxPageLimit) {
+	result := make(map[string]*accountset.BaseMainAccount)
+	for _, split := range slice.Split(ids, int(core.DefaultMaxPageLimit)) {
 		listReq := &core.ListReq{
-			Filter: expression,
-			Page: &core.BasePage{
-				Start: uint32(offset),
-				Limit: core.DefaultMaxPageLimit,
-				Sort:  "id",
-				Order: core.Ascending,
-			},
+			Filter: tools.ExpressionAnd(tools.RuleIn("id", split)),
+			Page:   core.NewDefaultBasePage(),
 		}
 		tmpResult, err := b.client.DataService().Global.MainAccount.List(kt, listReq)
 		if err != nil {
+			logs.Errorf("list main account failed, id: %v,err: %v, rid: %s", split, err, kt.Rid)
 			return nil, err
 		}
 		for _, item := range tmpResult.Details {

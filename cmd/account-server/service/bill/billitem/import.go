@@ -203,7 +203,7 @@ func (b *billItemSvc) ensurePullTasks(kt *kit.Kit, vendor enumor.Vendor,
 
 	mainAccounts, err := b.listMainAccount(kt, vendor)
 	if err != nil {
-		logs.Errorf("list main account failed, err: %v, rid: %s, vendor: %s", err, kt.Rid, vendor)
+		logs.Errorf("list main account failed, vendor: %s, err: %v, rid: %s", vendor, err, kt.Rid)
 		return err
 	}
 	mainAccountIDs := make([]string, 0, len(req.Items))

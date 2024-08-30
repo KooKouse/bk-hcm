@@ -33,8 +33,8 @@ import (
 	"hcm/pkg/logs"
 	"hcm/pkg/rest"
 	"hcm/pkg/thirdparty/esb/cmdb"
-	"hcm/pkg/tools/slice"
 	"hcm/pkg/tools/maps"
+	"hcm/pkg/tools/slice"
 )
 
 // ListMainAccountSummary list main account summary with options
@@ -60,6 +60,7 @@ func (s *service) ListMainAccountSummary(cts *rest.Contexts) (interface{}, error
 		var err error
 		expression, err = tools.And(req.Filter, expression)
 		if err != nil {
+			logs.Errorf("build filter expression failed, error: %v, rid: %s", err, cts.Kit.Rid)
 			return nil, err
 		}
 	}
@@ -184,28 +185,31 @@ func (s *service) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	rules := []cmdb.Rule{
-		&cmdb.AtomRule{
-			Field:    "bk_biz_id",
-			Operator: "in",
-			Value:    ids,
-		},
-	}
-	expression := &cmdb.QueryFilter{Rule: &cmdb.CombinedRule{Condition: "AND", Rules: rules}}
 
-	params := &cmdb.SearchBizParams{
-		BizPropertyFilter: expression,
-		Fields:            []string{"bk_biz_id", "bk_biz_name"},
-	}
-	resp, err := s.esbClient.Cmdb().SearchBusiness(kt, params)
-	if err != nil {
-		return nil, fmt.Errorf("call cmdb search business api failed, err: %v", err)
-	}
+	data := make(map[int64]string)
+	for _, split := range slice.Split(ids, int(core.DefaultMaxPageLimit)) {
+		rules := []cmdb.Rule{
+			&cmdb.AtomRule{
+				Field:    "bk_biz_id",
+				Operator: "in",
+				Value:    split,
+			},
+		}
+		expression := &cmdb.QueryFilter{Rule: &cmdb.CombinedRule{Condition: "AND", Rules: rules}}
 
-	infos := resp.Info
-	data := make(map[int64]string, len(infos))
-	for _, biz := range infos {
-		data[biz.BizID] = biz.BizName
+		params := &cmdb.SearchBizParams{
+			BizPropertyFilter: expression,
+			Fields:            []string{"bk_biz_id", "bk_biz_name"},
+		}
+		resp, err := s.esbClient.Cmdb().SearchBusiness(kt, params)
+		if err != nil {
+			logs.Errorf("call cmdb search business api failed, err: %v, rid: %s", err, kt.Rid)
+			return nil, fmt.Errorf("call cmdb search business api failed, err: %v", err)
+		}
+
+		for _, biz := range resp.Info {
+			data[biz.BizID] = biz.BizName
+		}
 	}
 
 	return data, nil
