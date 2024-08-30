@@ -232,7 +232,7 @@ func (c *Contexts) respError(err error) {
 	if c.Kit != nil {
 		c.resp.Header().Set(constant.RidKey, c.Kit.Rid)
 	}
-
+	c.resp.AddHeader(restful.HEADER_ContentType, restful.MIME_JSON)
 	resp := errf.Error(err).Resp()
 
 	encodeErr := json.NewEncoder(c.resp.ResponseWriter).Encode(resp)
