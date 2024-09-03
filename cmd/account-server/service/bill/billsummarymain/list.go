@@ -192,7 +192,7 @@ func (s *service) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error) {
 		rules := []cmdb.Rule{
 			&cmdb.AtomRule{
 				Field:    "bk_biz_id",
-				Operator: "in",
+				Operator: cmdb.OperatorIn,
 				Value:    split,
 			},
 		}

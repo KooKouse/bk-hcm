@@ -40,6 +40,8 @@ import (
 	"hcm/pkg/thirdparty/esb/cmdb"
 	"hcm/pkg/tools/converter"
 	"hcm/pkg/tools/slice"
+
+	"github.com/TencentBlueKing/gopkg/conv"
 )
 
 const (
@@ -188,7 +190,10 @@ func toRawData(kt *kit.Kit, details []*billcore.AdjustmentItem, mainAccountMap m
 
 	data := make([][]string, 0, len(details))
 	for _, detail := range details {
-		bizName := bizMap[detail.BkBizID]
+		bizName, ok := bizMap[detail.BkBizID]
+		if !ok {
+			logs.Warnf("biz(%d) not found", detail.BkBizID)
+		}
 		mainAccount, ok := mainAccountMap[detail.MainAccountID]
 		if !ok {
 			return nil, fmt.Errorf("main account(%s) not found", detail.MainAccountID)
@@ -197,6 +202,7 @@ func toRawData(kt *kit.Kit, details []*billcore.AdjustmentItem, mainAccountMap m
 		table := export.BillAdjustmentTable{
 			UpdateTime:      detail.UpdatedAt,
 			BillID:          detail.ID,
+			BKBizID:         conv.ToString(detail.BkBizID),
 			BKBizName:       bizName,
 			MainAccountName: mainAccount.Name,
 			AdjustType:      enumor.BillAdjustmentTypeNameMap[detail.Type],

@@ -35,6 +35,10 @@ func (r *BizSummaryExportReq) Validate() error {
 		return errors.New("export limit exceed")
 	}
 
+	if len(r.BKBizIDs) > 1000 {
+		return errors.New("bk biz ids exceed")
+	}
+
 	if r.BillYear == 0 {
 		return errors.New("year is required")
 	}

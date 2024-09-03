@@ -34,6 +34,7 @@ import (
 	"hcm/pkg/logs"
 	"hcm/pkg/tools/converter"
 
+	"github.com/TencentBlueKing/gopkg/conv"
 	"github.com/shopspring/decimal"
 )
 
@@ -110,7 +111,7 @@ func convertGcpBillItem(kt *kit.Kit, items []*billapi.GcpBillItem, bizNameMap ma
 		}
 		bizName, ok := bizNameMap[item.BkBizID]
 		if !ok {
-			return nil, fmt.Errorf("bizID(%d) not found", item.BkBizID)
+			logs.Warnf("biz(%d) not found", item.BkBizID)
 		}
 		extension := item.Extension.GcpRawBillItem
 		if extension == nil {
@@ -120,6 +121,7 @@ func convertGcpBillItem(kt *kit.Kit, items []*billapi.GcpBillItem, bizNameMap ma
 		table := export.GcpBillItemTable{
 			Site:                       string(mainAccount.Site),
 			AccountDate:                converter.PtrToVal[string](extension.Month),
+			BizID:                      conv.ToString(item.BkBizID),
 			BizName:                    bizName,
 			RootAccountName:            rootAccount.Name,
 			MainAccountName:            mainAccount.Name,

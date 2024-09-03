@@ -39,14 +39,15 @@ type HuaweiBillItemTable struct {
 	Site        string `header:"站点类型"`
 	AccountDate string `header:"核算年月"`
 
+	BizID   string `header:"业务"`
 	BizName string `header:"业务名称"`
 
 	RootAccountName string `header:"一级账号名称"`
 	MainAccountName string `header:"二级账号名称"`
-	Region          string `header:"地域"`
+	RegionName      string `header:"地域"`
 
 	ProductName          string `header:"产品名称"`
-	RegionName           string `header:"云服务区名称"`
+	Region               string `header:"云服务区名称"`
 	MeasureID            string `header:"金额单位"`
 	UsageType            string `header:"使用量类型"`
 	UsageMeasureID       string `header:"使用量度量单位"`

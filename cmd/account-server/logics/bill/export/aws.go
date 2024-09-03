@@ -39,6 +39,7 @@ type AwsBillItemTable struct {
 	Site        string `header:"站点类型"`
 	AccountDate string `header:"核算年月"`
 
+	BizID   string `header:"业务"`
 	BizName string `header:"业务名称"`
 
 	RootAccountName string `header:"一级账号名称"`

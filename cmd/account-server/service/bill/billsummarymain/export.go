@@ -35,6 +35,8 @@ import (
 	"hcm/pkg/logs"
 	"hcm/pkg/rest"
 	"hcm/pkg/tools/converter"
+
+	"github.com/TencentBlueKing/gopkg/conv"
 )
 
 const (
@@ -59,7 +61,7 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 
 	result, err := s.fetchMainAccountSummary(cts, req)
 	if err != nil {
-		logs.Errorf("fetch main account summary error: %s, rid: %s", err, cts.Kit.Rid)
+		logs.Errorf("fetch main account summary error: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -77,17 +79,17 @@ func (s *service) ExportMainAccountSummary(cts *rest.Contexts) (interface{}, err
 
 	mainAccountMap, err := s.listMainAccount(cts.Kit, mainAccountIDs)
 	if err != nil {
-		logs.Errorf("list main account error: %s, rid: %s", err, cts.Kit.Rid)
+		logs.Errorf("list main account error: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 	rootAccountMap, err := s.listRootAccount(cts.Kit, rootAccountIDs)
 	if err != nil {
-		logs.Errorf("list root account error: %s, rid: %s", err, cts.Kit.Rid)
+		logs.Errorf("list root account error: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 	bizMap, err := s.listBiz(cts.Kit, bizIDs)
 	if err != nil {
-		logs.Errorf("list biz error: %s, rid: %s", err, cts.Kit.Rid)
+		logs.Errorf("list biz, bizIDs: %v, error: %v, rid: %s", bizIDs, err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -187,12 +189,16 @@ func toRawData(kt *kit.Kit, details []*dsbillapi.BillSummaryMain, mainAccountMap
 		if !ok {
 			return nil, fmt.Errorf("root account(%s) not found", detail.RootAccountID)
 		}
-		bizName := bizMap[detail.BkBizID]
+		bizName, ok := bizMap[detail.BkBizID]
+		if !ok {
+			logs.Warnf("biz(%d) not found", detail.BkBizID)
+		}
 		table := export.BillSummaryMainTable{
 			MainAccountID:             mainAccount.CloudID,
 			MainAccountName:           mainAccount.Name,
 			RootAccountID:             rootAccount.CloudID,
 			RootAccountName:           rootAccount.Name,
+			BKBizID:                   conv.ToString(detail.BkBizID),
 			BKBizName:                 bizName,
 			CurrentMonthRMBCostSynced: detail.CurrentMonthRMBCostSynced.String(),
 			CurrentMonthCostSynced:    detail.CurrentMonthCostSynced.String(),

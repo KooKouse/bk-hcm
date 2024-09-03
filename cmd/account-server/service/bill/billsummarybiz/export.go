@@ -62,7 +62,7 @@ func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 
 	result, err := s.fetchBizSummary(cts, req)
 	if err != nil {
-		logs.Errorf("fetch biz summary failed: %v, rid: %s")
+		logs.Errorf("fetch biz summary failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -72,7 +72,7 @@ func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 	}
 	bizMap, err := s.listBiz(cts.Kit, bkBizIDs)
 	if err != nil {
-		logs.Errorf("list biz failed: %v, rid: %s", err, cts.Kit.Rid)
+		logs.Errorf("list biz failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -83,21 +83,21 @@ func (s *service) ExportBizSummary(cts *rest.Contexts) (interface{}, error) {
 		}
 	}()
 	if err != nil {
-		logs.Errorf("create writer failed: %v, rid: %s", err, cts.Kit.Rid)
+		logs.Errorf("create writer failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 	if err := writer.Write(export.BillSummaryBizTableHeader); err != nil {
-		logs.Errorf("write header failed: %v, rid: %s", err, cts.Kit.Rid)
+		logs.Errorf("write header failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
 	table, err := toRawData(cts.Kit, result, bizMap)
 	if err != nil {
-		logs.Errorf("convert to raw data failed: %v, rid: %s", err, cts.Kit.Rid)
+		logs.Errorf("convert to raw data failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 	if err := writer.WriteAll(table); err != nil {
-		logs.Errorf("write data failed: %v, rid: %s", err, cts.Kit.Rid)
+		logs.Errorf("write data failed, err: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 
@@ -125,7 +125,7 @@ func toRawData(kt *kit.Kit, details []*billproto.BillSummaryBizResult, bizMap ma
 		}
 		fields, err := table.GetHeaderValues()
 		if err != nil {
-			logs.Errorf("get header fields failed: %v, rid: %s", err, kt.Rid)
+			logs.Errorf("get header fields failed, err: %v, rid: %s", err, kt.Rid)
 			return nil, err
 		}
 		result = append(result, fields)
@@ -207,7 +207,7 @@ func (s *service) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error) {
 	rules := []cmdb.Rule{
 		&cmdb.AtomRule{
 			Field:    "bk_biz_id",
-			Operator: "in",
+			Operator: cmdb.OperatorIn,
 			Value:    ids,
 		},
 	}

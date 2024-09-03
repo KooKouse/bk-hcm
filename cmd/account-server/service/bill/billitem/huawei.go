@@ -141,7 +141,7 @@ func convertHuaweiBillItems(kt *kit.Kit, items []*billapi.HuaweiBillItem, bizNam
 		}
 		bizName, ok := bizNameMap[item.BkBizID]
 		if !ok {
-			return nil, fmt.Errorf("bizID(%d) not found", item.BkBizID)
+			logs.Warnf("biz(%d) not found", item.BkBizID)
 		}
 
 		extension := item.Extension.ResFeeRecordV2
@@ -152,12 +152,13 @@ func convertHuaweiBillItems(kt *kit.Kit, items []*billapi.HuaweiBillItem, bizNam
 		var table = export.HuaweiBillItemTable{
 			Site:                 string(mainAccount.Site),
 			AccountDate:          fmt.Sprintf("%d%02d", item.BillYear, item.BillMonth),
+			BizID:                conv.ToString(item.BkBizID),
 			BizName:              bizName,
 			RootAccountName:      rootAccount.Name,
 			MainAccountName:      mainAccount.Name,
-			Region:               converter.PtrToVal[string](extension.RegionName),
+			RegionName:           converter.PtrToVal[string](extension.RegionName), // demo:华东-上海一
 			ProductName:          converter.PtrToVal[string](extension.ProductName),
-			RegionName:           converter.PtrToVal[string](extension.Region),
+			Region:               converter.PtrToVal[string](extension.Region),                       // demo: cn-east-3
 			MeasureID:            huaWeiMeasureIdMap[converter.PtrToVal[int32](extension.MeasureId)], // 金额单位。 1：元
 			UsageType:            converter.PtrToVal[string](extension.UsageType),
 			UsageMeasureID:       conv.ToString(converter.PtrToVal[int32](extension.UsageMeasureId)),

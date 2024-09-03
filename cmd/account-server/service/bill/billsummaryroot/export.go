@@ -72,7 +72,7 @@ func (s *service) ExportRootAccountSummary(cts *rest.Contexts) (interface{}, err
 	rootAccountIDs := converter.MapKeyToSlice(rootAccountIDMap)
 	rootAccountMap, err := s.listRootAccount(cts.Kit, rootAccountIDs)
 	if err != nil {
-		logs.Errorf("list root account error: %s, rid: %s", err, cts.Kit.Rid)
+		logs.Errorf("list root account error: %v, rid: %s", err, cts.Kit.Rid)
 		return nil, err
 	}
 

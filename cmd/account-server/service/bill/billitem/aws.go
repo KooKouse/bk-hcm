@@ -33,6 +33,7 @@ import (
 	"hcm/pkg/kit"
 	"hcm/pkg/logs"
 
+	"github.com/TencentBlueKing/gopkg/conv"
 	"github.com/shopspring/decimal"
 )
 
@@ -107,7 +108,7 @@ func convertAwsBillItems(kt *kit.Kit, items []*billapi.AwsBillItem, bizNameMap m
 		}
 		bizName, ok := bizNameMap[item.BkBizID]
 		if !ok {
-			return nil, fmt.Errorf("productID(%d) not found", item.ProductID)
+			logs.Warnf("biz(%d) not found", item.BkBizID)
 		}
 
 		extension := item.Extension.AwsRawBillItem
@@ -118,6 +119,7 @@ func convertAwsBillItems(kt *kit.Kit, items []*billapi.AwsBillItem, bizNameMap m
 		table := &export.AwsBillItemTable{
 			Site:                string(mainAccount.Site),
 			AccountDate:         fmt.Sprintf("%d-%02d", item.BillYear, item.BillMonth),
+			BizID:               conv.ToString(item.BkBizID),
 			BizName:             bizName,
 			RootAccountName:     rootAccount.Name,
 			MainAccountName:     mainAccount.Name,

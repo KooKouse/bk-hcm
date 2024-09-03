@@ -41,7 +41,8 @@ type BillSummaryMainTable struct {
 	RootAccountID   string `header:"一级账号ID"`
 	RootAccountName string `header:"一级账号名称"`
 
-	BKBizName string `header:"业务"`
+	BKBizID   string `header:"业务"`
+	BKBizName string `header:"业务名称"`
 
 	CurrentMonthRMBCostSynced string `header:"已确认账单人民币（元）"`
 	CurrentMonthCostSynced    string `header:"已确认账单美金（美元）"`

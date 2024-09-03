@@ -100,7 +100,7 @@ type BillSummaryRootListResult = core.ListResultT[BillSummaryRootResult]
 type RootAccountSummaryExportReq struct {
 	BillYear    int                `json:"bill_year" validate:"required"`
 	BillMonth   int                `json:"bill_month" validate:"required"`
-	ExportLimit uint64             `json:"export_limit" validate:"omitempty"`
+	ExportLimit uint64             `json:"export_limit" validate:"required"`
 	Filter      *filter.Expression `json:"filter" validate:"omitempty"`
 }
 
