@@ -129,7 +129,7 @@ func generateFilename() string {
 }
 
 func (s *service) fetchMainAccountSummary(cts *rest.Contexts, req *asbillapi.MainAccountSummaryExportReq) (
-	[]*dsbillapi.BillSummaryMainResult, error) {
+	[]*dsbillapi.BillSummaryMain, error) {
 
 	var expression = tools.ExpressionAnd(
 		tools.RuleEqual("bill_year", req.BillYear),
@@ -154,7 +154,7 @@ func (s *service) fetchMainAccountSummary(cts *rest.Contexts, req *asbillapi.Mai
 	}
 
 	exportLimit := min(details.Count, req.ExportLimit)
-	result := make([]*dsbillapi.BillSummaryMainResult, 0, exportLimit)
+	result := make([]*dsbillapi.BillSummaryMain, 0, exportLimit)
 	for offset := uint64(0); offset < exportLimit; offset = offset + uint64(core.DefaultMaxPageLimit) {
 		left := exportLimit - offset
 		listReq := &dsbillapi.BillSummaryMainListReq{
@@ -173,7 +173,7 @@ func (s *service) fetchMainAccountSummary(cts *rest.Contexts, req *asbillapi.Mai
 	return result, nil
 }
 
-func toRawData(kt *kit.Kit, details []*dsbillapi.BillSummaryMainResult, mainAccountMap map[string]*accountset.BaseMainAccount,
+func toRawData(kt *kit.Kit, details []*dsbillapi.BillSummaryMain, mainAccountMap map[string]*accountset.BaseMainAccount,
 	rootAccountMap map[string]*accountset.BaseRootAccount, bizMap map[int64]string) ([][]string, error) {
 
 	data := make([][]string, 0, len(details))

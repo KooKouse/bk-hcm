@@ -135,7 +135,7 @@ func toRawData(kt *kit.Kit, details []*billproto.BillSummaryBizResult, bizMap ma
 func (s *service) fetchBizSummary(cts *rest.Contexts, req *bill.BizSummaryExportReq) (
 	[]*billproto.BillSummaryBizResult, error) {
 
-	if len(req.BKBizIDs) > 0 {
+	if len(req.BKBizIDs) == 0 {
 		return s.fetchAllBizSummary(cts, req)
 	}
 	result := make([]*billproto.BillSummaryBizResult, 0)
