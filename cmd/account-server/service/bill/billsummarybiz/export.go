@@ -135,17 +135,39 @@ func toRawData(kt *kit.Kit, details []*billproto.BillSummaryBizResult, bizMap ma
 func (s *service) fetchBizSummary(cts *rest.Contexts, req *bill.BizSummaryExportReq) (
 	[]*billproto.BillSummaryBizResult, error) {
 
+	if len(req.BKBizIDs) > 0 {
+		return s.fetchAllBizSummary(cts, req)
+	}
+	result := make([]*billproto.BillSummaryBizResult, 0)
+	for _, bkBizIDs := range slice.Split(req.BKBizIDs, int(core.DefaultMaxPageLimit)) {
+		expression := tools.ExpressionAnd(
+			tools.RuleEqual("bill_year", req.BillYear),
+			tools.RuleEqual("bill_month", req.BillMonth),
+			tools.RuleIn("bk_biz_id", bkBizIDs),
+		)
+		listReq := &core.ListReq{
+			Filter: expression,
+			Page:   core.NewDefaultBasePage(),
+		}
+		tmpResult, err := s.client.DataService().Global.Bill.ListBillSummaryBiz(cts.Kit, listReq)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, tmpResult.Details...)
+	}
+	if len(result) > int(req.ExportLimit) {
+		return result[:req.ExportLimit], nil
+	}
+	return result, nil
+}
+
+func (s *service) fetchAllBizSummary(cts *rest.Contexts, req *bill.BizSummaryExportReq) (
+	[]*billproto.BillSummaryBizResult, error) {
+
 	var expression = tools.ExpressionAnd(
 		tools.RuleEqual("bill_year", req.BillYear),
 		tools.RuleEqual("bill_month", req.BillMonth),
 	)
-	if len(req.BKBizIDs) > 0 {
-		var err error
-		expression, err = tools.And(expression, tools.RuleIn("bk_biz_id", req.BKBizIDs))
-		if err != nil {
-			return nil, err
-		}
-	}
 	listReq := &core.ListReq{
 		Filter: expression,
 		Page:   core.NewCountPage(),
