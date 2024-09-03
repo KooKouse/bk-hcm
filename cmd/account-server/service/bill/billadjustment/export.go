@@ -222,7 +222,7 @@ func (b *billAdjustmentSvc) listBiz(kt *kit.Kit, ids []int64) (map[int64]string,
 	}
 
 	data := make(map[int64]string)
-	for _, split := range slice.Split(ids, int(core.DefaultMaxPageLimit)) {
+	for _, split := range slice.Split(ids, int(filter.DefaultMaxInLimit)) {
 		rules := []cmdb.Rule{
 			&cmdb.AtomRule{
 				Field:    "bk_biz_id",
@@ -257,7 +257,7 @@ func (b *billAdjustmentSvc) listMainAccount(kt *kit.Kit, ids []string) (map[stri
 	}
 
 	result := make(map[string]*accountset.BaseMainAccount)
-	for _, split := range slice.Split(ids, int(core.DefaultMaxPageLimit)) {
+	for _, split := range slice.Split(ids, int(filter.DefaultMaxInLimit)) {
 		listReq := &core.ListReq{
 			Filter: tools.ExpressionAnd(tools.RuleIn("id", split)),
 			Page:   core.NewDefaultBasePage(),

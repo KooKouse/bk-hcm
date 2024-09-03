@@ -33,6 +33,7 @@ import (
 	"hcm/pkg/kit"
 	"hcm/pkg/logs"
 	"hcm/pkg/rest"
+	"hcm/pkg/runtime/filter"
 	"hcm/pkg/thirdparty/esb/cmdb"
 	"hcm/pkg/tools/slice"
 
@@ -139,7 +140,7 @@ func (s *service) fetchBizSummary(cts *rest.Contexts, req *bill.BizSummaryExport
 		return s.fetchAllBizSummary(cts, req)
 	}
 	result := make([]*billproto.BillSummaryBizResult, 0)
-	for _, bkBizIDs := range slice.Split(req.BKBizIDs, int(core.DefaultMaxPageLimit)) {
+	for _, bkBizIDs := range slice.Split(req.BKBizIDs, int(filter.DefaultMaxInLimit)) {
 		expression := tools.ExpressionAnd(
 			tools.RuleEqual("bill_year", req.BillYear),
 			tools.RuleEqual("bill_month", req.BillMonth),

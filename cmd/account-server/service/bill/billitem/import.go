@@ -40,6 +40,7 @@ import (
 	"hcm/pkg/kit"
 	"hcm/pkg/logs"
 	"hcm/pkg/rest"
+	"hcm/pkg/runtime/filter"
 	"hcm/pkg/tools/slice"
 	"hcm/pkg/tools/times"
 
@@ -298,7 +299,7 @@ func (b *billItemSvc) listSummaryMainByMainAccountIDs(kt *kit.Kit, vendor enumor
 	billYear, billMonth int) ([]*dsbill.BillSummaryMain, error) {
 
 	result := make([]*dsbill.BillSummaryMain, 0, len(mainAccountIDs))
-	for _, ids := range slice.Split(mainAccountIDs, int(core.DefaultMaxPageLimit)) {
+	for _, ids := range slice.Split(mainAccountIDs, int(filter.DefaultMaxInLimit)) {
 		listReq := &dsbill.BillSummaryMainListReq{
 			Filter: tools.ExpressionAnd(
 				tools.RuleEqual("vendor", vendor),

@@ -32,6 +32,7 @@ import (
 	"hcm/pkg/kit"
 	"hcm/pkg/logs"
 	"hcm/pkg/rest"
+	"hcm/pkg/runtime/filter"
 	"hcm/pkg/thirdparty/esb/cmdb"
 	"hcm/pkg/tools/maps"
 	"hcm/pkg/tools/slice"
@@ -187,7 +188,7 @@ func (s *service) listBiz(kt *kit.Kit, ids []int64) (map[int64]string, error) {
 	}
 
 	data := make(map[int64]string)
-	for _, split := range slice.Split(ids, int(core.DefaultMaxPageLimit)) {
+	for _, split := range slice.Split(ids, int(filter.DefaultMaxInLimit)) {
 		rules := []cmdb.Rule{
 			&cmdb.AtomRule{
 				Field:    "bk_biz_id",
