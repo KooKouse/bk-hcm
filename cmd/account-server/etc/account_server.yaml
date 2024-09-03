@@ -74,11 +74,14 @@ controller:
 tmpFileDir: /tmp
 
 billAllocation:
-  # aws saving plan allocation option
-  awsSavingPlans:
-#    - rootAccountId:
-#      spArnPrefix:
-#      SpPurchaseAccountCloudID:
+  # aws savings plans allocation option
+  awsSavingsPlans:
+#    - rootAccountCloudID: xxx
+#      SpPurchaseAccountCloudID: xxx
+#      spArnPrefix: arn:aws:savingsplans::xxxxx:savingsplan/
+  awsCommonExpense:
+    excludeAccountCloudIDs:
+#      - 123456789
 
 # defines esb related settings.
 esb:

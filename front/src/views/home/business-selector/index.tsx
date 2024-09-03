@@ -9,8 +9,7 @@ import { useAccountStore } from '@/store';
 import { localStorageActions } from '@/common/util';
 import { getFavoriteList, useFavorite } from '@/hooks/useFavorite';
 import { Button, Dialog, Exception } from 'bkui-vue';
-import { decodeValueByAtob, encodeValueByBtoa } from '@/utils';
-import { GLOBAL_BIZS_KEY } from '@/common/constant';
+import { GLOBAL_BIZS_KEY, GLOBAL_BIZS_VERSION, GLOBAL_BIZS_VERSION_KEY } from '@/common/constant';
 
 export default defineComponent({
   name: 'BusinessSelector',
@@ -31,10 +30,9 @@ export default defineComponent({
       // 存入store
       accountStore.updateBizsId(val);
       // 存入local storage
-      const saveValue = encodeValueByBtoa(val);
-      localStorageActions.set(GLOBAL_BIZS_KEY, saveValue);
+      localStorageActions.set(GLOBAL_BIZS_KEY, val);
       // 返回query参数
-      return { [GLOBAL_BIZS_KEY]: saveValue };
+      return { [GLOBAL_BIZS_KEY]: val };
     };
 
     // 选择业务
@@ -57,9 +55,19 @@ export default defineComponent({
 
     // 获取上一次存储的全局业务id（先从url中获取全局业务id, 如果没有, 则从localStorage中获取, 如果还是没有, 则返回undefined）
     const getGlobalBizsId = () => {
-      // 获取localStorage中的全局业务id的版本号，如果版本号不一致, 则清除url以及localStorage中的全局业务id，并更新版本号
-      const urlBizs = route.query[GLOBAL_BIZS_KEY] && decodeValueByAtob(route.query[GLOBAL_BIZS_KEY] as string);
-      return urlBizs ?? localStorageActions.get(GLOBAL_BIZS_KEY, (value) => value && decodeValueByAtob(value));
+      // 获取local storage中的全局业务id版本号，如果版本号不一致，则清空url、local storage中的全局业务id，并更新版本号
+      const lastBizsVersion = localStorageActions.get(GLOBAL_BIZS_VERSION_KEY, (value) => value);
+
+      if (GLOBAL_BIZS_VERSION !== lastBizsVersion) {
+        localStorageActions.remove(GLOBAL_BIZS_KEY);
+        localStorageActions.set(GLOBAL_BIZS_VERSION_KEY, GLOBAL_BIZS_VERSION);
+        return;
+      }
+
+      const lastUrlBizs = +route.query[GLOBAL_BIZS_KEY];
+      const lastLocalBizs = +localStorageActions.get(GLOBAL_BIZS_KEY, (value) => value);
+
+      return lastUrlBizs || lastLocalBizs;
     };
 
     const fetchBusinessList = async () => {

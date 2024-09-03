@@ -28,7 +28,7 @@ import (
 func Test_generateRemainingPullTask(t *testing.T) {
 	type args struct {
 		existBillDays []int
-		summary       *dsbill.BillSummaryMainResult
+		summary       *dsbill.BillSummaryMain
 	}
 	tests := []struct {
 		name    string
@@ -39,7 +39,7 @@ func Test_generateRemainingPullTask(t *testing.T) {
 			name: "Test_generateRemainingPullTask_1",
 			args: args{
 				existBillDays: []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
-				summary: &dsbill.BillSummaryMainResult{
+				summary: &dsbill.BillSummaryMain{
 					BillYear:  2024,
 					BillMonth: 7,
 				},
@@ -50,7 +50,7 @@ func Test_generateRemainingPullTask(t *testing.T) {
 			name: "Test_generateRemainingPullTask_2",
 			args: args{
 				existBillDays: []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
-				summary: &dsbill.BillSummaryMainResult{
+				summary: &dsbill.BillSummaryMain{
 					BillYear:  2024,
 					BillMonth: 6,
 				},
@@ -61,7 +61,7 @@ func Test_generateRemainingPullTask(t *testing.T) {
 			name: "Test_generateRemainingPullTask_3",
 			args: args{
 				existBillDays: []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
-				summary: &dsbill.BillSummaryMainResult{
+				summary: &dsbill.BillSummaryMain{
 					BillYear:  2024,
 					BillMonth: 2,
 				},
@@ -72,7 +72,7 @@ func Test_generateRemainingPullTask(t *testing.T) {
 			name: "Test_generateRemainingPullTask_4",
 			args: args{
 				existBillDays: []int{},
-				summary: &dsbill.BillSummaryMainResult{
+				summary: &dsbill.BillSummaryMain{
 					BillYear:  2024,
 					BillMonth: 7,
 				},
@@ -84,7 +84,7 @@ func Test_generateRemainingPullTask(t *testing.T) {
 			args: args{
 				existBillDays: []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
 					24, 25, 26, 27, 28, 29, 30, 31},
-				summary: &dsbill.BillSummaryMainResult{
+				summary: &dsbill.BillSummaryMain{
 					BillYear:  2024,
 					BillMonth: 7,
 				},

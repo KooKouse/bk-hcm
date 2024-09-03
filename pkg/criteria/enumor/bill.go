@@ -220,6 +220,9 @@ const (
 	MonthRawBillSpecialDatePathName = "00"
 )
 
+// MonthTaskSpecialBillDay special bill day 0 to represent the whole month
+const MonthTaskSpecialBillDay = 0
+
 var (
 	// BillAdjustmentStateNameMap is the map of bill adjustment state name
 	BillAdjustmentStateNameMap = map[BillAdjustmentState]string{
