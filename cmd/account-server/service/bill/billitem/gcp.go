@@ -170,7 +170,7 @@ func (b *billItemSvc) fetchGcpBillItems(kt *kit.Kit, req *bill.ExportBillItemReq
 		if len(lastID) > 0 {
 			expr, err = tools.And(
 				expr,
-				tools.RuleGreaterThan("id", lastID),
+				tools.RuleIDGreaterThan(lastID),
 			)
 			if err != nil {
 				logs.Errorf("[fetchGcpBillItems] build filter failed, lastID: %s, filter: %v, error: %v, rid: %s",

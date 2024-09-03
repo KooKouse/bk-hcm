@@ -205,7 +205,7 @@ func (b *billItemSvc) fetchHuaweiBillItems(kt *kit.Kit, req *bill.ExportBillItem
 		left := exportLimit - offset
 		expr := req.Filter
 		if len(lastID) > 0 {
-			expr, err = tools.And(expr, tools.RuleGreaterThan("id", lastID))
+			expr, err = tools.And(expr, tools.RuleIDGreaterThan(lastID))
 			if err != nil {
 				logs.Errorf("build filter failed: %v, rid: %s", err, kt.Rid)
 				return err
