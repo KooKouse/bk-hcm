@@ -123,9 +123,9 @@ func convertGcpBillItem(kt *kit.Kit, items []*billapi.GcpBillItem, bizNameMap ma
 			BizName:                    bizName,
 			RootAccountName:            rootAccount.Name,
 			MainAccountName:            mainAccount.Name,
-			Region:                     converter.PtrToVal[string](item.Extension.GcpRawBillItem.Region),
+			Region:                     converter.PtrToVal[string](extension.Region),
 			RegionName:                 regionMap[converter.PtrToVal[string](extension.Region)],
-			ProjectID:                  converter.PtrToVal[string](item.Extension.GcpRawBillItem.ProjectID),
+			ProjectID:                  converter.PtrToVal[string](extension.ProjectID),
 			ProjectName:                converter.PtrToVal[string](extension.ProjectName),
 			ServiceCategory:            converter.PtrToVal[string](extension.ServiceDescription), // 服务分类
 			ServiceCategoryDescription: converter.PtrToVal[string](extension.ServiceDescription), // 服务分类名称
