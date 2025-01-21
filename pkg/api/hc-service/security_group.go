@@ -165,3 +165,15 @@ type AzureSecurityGroupAssociateNIReq struct {
 func (opt AzureSecurityGroupAssociateNIReq) Validate() error {
 	return validator.Validate.Struct(opt)
 }
+
+// ListSecurityGroupStatisticReq define tcloud list security group statistic request.
+type ListSecurityGroupStatisticReq struct {
+	SecurityGroupIDs []string `json:"security_group_ids" validate:"required,max=100,min=1"`
+	Region           string   `json:"region" validate:"required"`
+	AccountID        string   `json:"account_id" validate:"required"`
+}
+
+// Validate tcloud list security group statistic request.
+func (req *ListSecurityGroupStatisticReq) Validate() error {
+	return validator.Validate.Struct(req)
+}

@@ -62,6 +62,8 @@ func InitSecurityGroupService(cap *capability.Capability) {
 		sg.CreateHuaWeiSGRule)
 	h.Add("DeleteAwsSGRule", "DELETE", "/vendors/huawei/security_groups/{security_group_id}/rules/{id}",
 		sg.DeleteHuaWeiSGRule)
+	h.Add("HuaweiListSecurityGroupStatistic", "POST", "/vendors/huawei/security_groups/statistic",
+		sg.HuaweiListSecurityGroupStatistic)
 
 	h.Add("AzureSecurityGroupAssociateSubnet", "POST", "/vendors/azure/security_groups/associate/subnets",
 		sg.AzureSecurityGroupAssociateSubnet)
