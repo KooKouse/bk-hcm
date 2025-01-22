@@ -50,6 +50,8 @@ func InitSecurityGroupService(cap *capability.Capability) {
 		sg.UpdateAwsSGRule)
 	h.Add("DeleteAwsSGRule", "DELETE", "/vendors/aws/security_groups/{security_group_id}/rules/{id}",
 		sg.DeleteAwsSGRule)
+	h.Add("AwsListSecurityGroupStatistic", "POST", "/vendors/aws/security_groups/statistic",
+		sg.AwsListSecurityGroupStatistic)
 
 	h.Add("HuaWeiSecurityGroupAssociateCvm", "POST", "/vendors/huawei/security_groups/associate/cvms",
 		sg.HuaWeiSecurityGroupAssociateCvm)

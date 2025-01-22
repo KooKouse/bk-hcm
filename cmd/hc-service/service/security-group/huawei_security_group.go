@@ -344,6 +344,7 @@ func (g *securityGroup) HuaweiListSecurityGroupStatistic(cts *rest.Contexts) (an
 		Region:           req.Region,
 		SecurityGroupIDs: converter.MapKeyToSlice(cloudIDToSgIDMap),
 	}
+	// TODO 分页实现
 	resp, err := client.ListPorts(cts.Kit, opt)
 	if err != nil {
 		logs.Errorf("request adaptor to tcloud security group statistic failed, err: %v, opt: %v, rid: %s",

@@ -79,3 +79,12 @@ type AwsSGRuleUpdateReq struct {
 func (req *AwsSGRuleUpdateReq) Validate() error {
 	return validator.Validate.Struct(req)
 }
+
+// AwsListSecurityGroupStatisticItem ...
+type AwsListSecurityGroupStatisticItem struct {
+	// SecurityGroupID security group id
+	SecurityGroupID string `json:"security_group_id"`
+
+	// ResourceCountMap key: resource type, such as "RDS", value: resource count
+	ResourceCountMap map[string]int64 `json:"resource_count_map"`
+}
