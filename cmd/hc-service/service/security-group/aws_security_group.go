@@ -307,17 +307,10 @@ func (g *securityGroup) AwsListSecurityGroupStatistic(cts *rest.Contexts) (any, 
 		return nil, err
 	}
 
-	result := make(map[string]*proto.AwsListSecurityGroupStatisticItem, 0)
-	for _, sgID := range req.SecurityGroupIDs {
-		result[sgID] = &proto.AwsListSecurityGroupStatisticItem{
-			SecurityGroupID:  sgID,
-			ResourceCountMap: make(map[string]int64),
-		}
-	}
-	// TODO instanceType
+	sgIDToResourceCountMap := make(map[string]map[string]int64)
 	for _, one := range resp {
 		/**
-		instanceType 可选值:
+		InterfaceType 可选值:
 		api_gateway_managed | aws_codestar_connections_managed | branch | ec2_instance_connect_endpoint |
 		efa | efa-only | efs | gateway_load_balancer | gateway_load_balancer_endpoint | global_accelerator_managed |
 		interface | iot_rules_managed | lambda | load_balancer | nat_gateway | network_load_balancer | quicksight |
@@ -331,11 +324,16 @@ func (g *securityGroup) AwsListSecurityGroupStatistic(cts *rest.Contexts) (any, 
 					group.GroupId, cts.Kit.Rid)
 				continue
 			}
-			result[sgID].ResourceCountMap[interfaceType] += 1
+			m, ok := sgIDToResourceCountMap[sgID]
+			if !ok {
+				m = make(map[string]int64)
+				sgIDToResourceCountMap[sgID] = m
+			}
+			m[interfaceType]++
 		}
 	}
 
-	return converter.MapValueToSlice(result), nil
+	return resourceCountMapToSecurityGroupStatisticItem(sgIDToResourceCountMap), nil
 }
 
 func (g *securityGroup) listAwsCvmNetworkInterfaceFromCloud(kt *kit.Kit, region, accountID string,

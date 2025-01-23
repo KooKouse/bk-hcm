@@ -648,14 +648,25 @@ func (g *securityGroup) TCloudListSecurityGroupStatistic(cts *rest.Contexts) (an
 		return nil, err
 	}
 
-	result := make([]proto.TCloudListSecurityGroupStatisticItem, 0)
+	sgIDToResourceCountMap := make(map[string]map[string]int64)
 	for _, one := range resp {
-		result = append(result, proto.TCloudListSecurityGroupStatisticItem{
-			TCloudSecurityGroupAssociationStatistic: one,
-			ID:                                      cloudIDToSgIDMap[converter.PtrToVal(one.SecurityGroupId)],
-		})
+		sgID := cloudIDToSgIDMap[converter.PtrToVal(one.SecurityGroupId)]
+		sgIDToResourceCountMap[sgID] = tcloudSGAssociateStatisticToResourceCountMap(one)
 	}
-	return result, nil
+
+	return resourceCountMapToSecurityGroupStatisticItem(sgIDToResourceCountMap), nil
+}
+
+func tcloudSGAssociateStatisticToResourceCountMap(
+	statistic securitygroup.TCloudSecurityGroupAssociationStatistic) map[string]int64 {
+
+	return map[string]int64{
+		"CVM": int64(converter.PtrToVal(statistic.CVM)),
+		"CDB": int64(converter.PtrToVal(statistic.CDB)),
+		"ENI": int64(converter.PtrToVal(statistic.ENI)),
+		"SG":  int64(converter.PtrToVal(statistic.SG)),
+		"CLB": int64(converter.PtrToVal(statistic.CLB)),
+	}
 }
 
 // TCloudSGBatchDisassociateCvm  批量解绑安全组

@@ -383,6 +383,7 @@ func (v AzureVpcListUsageOption) Validate() error {
 type HuaweiListPortOption struct {
 	Region           string   `json:"region" validate:"required"`
 	SecurityGroupIDs []string `json:"security_group_ids" validate:"required"`
+	Marker           string   `json:"marker" validate:"omitempty"`
 }
 
 // Validate ...

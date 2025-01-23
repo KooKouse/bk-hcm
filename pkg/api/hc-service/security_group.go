@@ -178,8 +178,17 @@ func (req *ListSecurityGroupStatisticReq) Validate() error {
 	return validator.Validate.Struct(req)
 }
 
-// SecurityGroupStatistic ...
-type SecurityGroupStatistic struct {
+// ListSecurityGroupStatisticResp ...
+type ListSecurityGroupStatisticResp = []SecurityGroupStatisticItem
+
+// SecurityGroupStatisticItem ...
+type SecurityGroupStatisticItem struct {
+	ID        string                           `json:"id"`
+	Resources []SecurityGroupStatisticResource `json:"resources"`
+}
+
+// SecurityGroupStatisticResource ...
+type SecurityGroupStatisticResource struct {
 	ResName string `json:"res_name"`
 	Count   int64  `json:"count"`
 }

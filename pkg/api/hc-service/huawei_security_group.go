@@ -60,12 +60,3 @@ type HuaWeiSGRuleCreate struct {
 	Action             *string `json:"action"`
 	Priority           int64   `json:"priority"`
 }
-
-// HuaweiListSecurityGroupStatisticItem ...
-type HuaweiListSecurityGroupStatisticItem struct {
-	// SecurityGroupID security group id
-	SecurityGroupID string `json:"security_group_id"`
-
-	// ResourceCountMap key: resource type, such as "RDS", value: resource count
-	ResourceCountMap map[string]int64 `json:"resource_count_map"`
-}

@@ -330,6 +330,9 @@ func (h *HuaWei) ListPorts(kt *kit.Kit, opt *types.HuaweiListPortOption) ([]v2.P
 
 	req := new(v2.ListPortsRequest)
 	req.SecurityGroups = converter.ValToPtr(opt.SecurityGroupIDs)
+	if opt.Marker != "" {
+		req.Marker = converter.ValToPtr(opt.Marker)
+	}
 
 	resp, err := client.ListPorts(req)
 	if err != nil {
