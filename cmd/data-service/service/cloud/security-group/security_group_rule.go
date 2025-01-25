@@ -64,11 +64,11 @@ func (svc *securityGroupSvc) ListSecurityGroupRulesCount(cts *rest.Contexts) (in
 
 func (svc *securityGroupSvc) listTCloudSecurityGroupRulesCount(kt *kit.Kit, ids []string) (map[string]int64, error) {
 	result := make(map[string]int64)
-	for _, tmp := range slice.Split(ids, int(core.DefaultMaxPageLimit)) {
+	for _, sgIDs := range slice.Split(ids, int(core.DefaultMaxPageLimit)) {
 		resp, err := svc.dao.TCloudSGRule().CountBySecurityGroupIDs(kt,
-			tools.ContainersExpression("security_group_id", tmp))
+			tools.ContainersExpression("security_group_id", sgIDs))
 		if err != nil {
-			logs.Errorf("listTCloudSecurityGroupRulesCount failed, err: %s, ids: %v, rid: %s", err, tmp, kt.Rid)
+			logs.Errorf("listTCloudSecurityGroupRulesCount failed, err: %v, ids: %v, rid: %s", err, sgIDs, kt.Rid)
 			return nil, err
 		}
 		for k, v := range resp {
@@ -80,11 +80,11 @@ func (svc *securityGroupSvc) listTCloudSecurityGroupRulesCount(kt *kit.Kit, ids 
 
 func (svc *securityGroupSvc) listHuaweiSecurityGroupRulesCount(kt *kit.Kit, ids []string) (map[string]int64, error) {
 	result := make(map[string]int64)
-	for _, tmp := range slice.Split(ids, int(core.DefaultMaxPageLimit)) {
+	for _, sgIDs := range slice.Split(ids, int(core.DefaultMaxPageLimit)) {
 		resp, err := svc.dao.HuaWeiSGRule().CountBySecurityGroupIDs(kt,
-			tools.ContainersExpression("security_group_id", tmp))
+			tools.ContainersExpression("security_group_id", sgIDs))
 		if err != nil {
-			logs.Errorf("listHuaweiSecurityGroupRulesCount failed, err: %s, ids: %v, rid: %s", err, tmp, kt.Rid)
+			logs.Errorf("listHuaweiSecurityGroupRulesCount failed, err: %v, ids: %v, rid: %s", err, sgIDs, kt.Rid)
 			return nil, err
 		}
 		for k, v := range resp {
@@ -96,11 +96,11 @@ func (svc *securityGroupSvc) listHuaweiSecurityGroupRulesCount(kt *kit.Kit, ids 
 
 func (svc *securityGroupSvc) listAwsSecurityGroupRulesCount(kt *kit.Kit, ids []string) (map[string]int64, error) {
 	result := make(map[string]int64)
-	for _, tmp := range slice.Split(ids, int(core.DefaultMaxPageLimit)) {
+	for _, sgIDs := range slice.Split(ids, int(core.DefaultMaxPageLimit)) {
 		resp, err := svc.dao.AwsSGRule().CountBySecurityGroupIDs(kt,
-			tools.ContainersExpression("security_group_id", tmp))
+			tools.ContainersExpression("security_group_id", sgIDs))
 		if err != nil {
-			logs.Errorf("listAwsSecurityGroupRulesCount failed, err: %s, ids: %v, rid: %s", err, tmp, kt.Rid)
+			logs.Errorf("listAwsSecurityGroupRulesCount failed, err: %v, ids: %v, rid: %s", err, sgIDs, kt.Rid)
 			return nil, err
 		}
 		for k, v := range resp {
@@ -113,11 +113,11 @@ func (svc *securityGroupSvc) listAwsSecurityGroupRulesCount(kt *kit.Kit, ids []s
 func (svc *securityGroupSvc) listAzureSecurityGroupRulesCount(kt *kit.Kit, ids []string) (map[string]int64, error) {
 	// split ids to 100 each
 	result := make(map[string]int64)
-	for _, tmp := range slice.Split(ids, int(core.DefaultMaxPageLimit)) {
+	for _, sgIDs := range slice.Split(ids, int(core.DefaultMaxPageLimit)) {
 		resp, err := svc.dao.AzureSGRule().CountBySecurityGroupIDs(kt,
-			tools.ContainersExpression("security_group_id", tmp))
+			tools.ContainersExpression("security_group_id", sgIDs))
 		if err != nil {
-			logs.Errorf("listAzureSecurityGroupRulesCount failed, err: %s, ids: %v, rid: %s", err, tmp, kt.Rid)
+			logs.Errorf("listAzureSecurityGroupRulesCount failed, err: %v, ids: %v, rid: %s", err, sgIDs, kt.Rid)
 			return nil, err
 		}
 		for k, v := range resp {

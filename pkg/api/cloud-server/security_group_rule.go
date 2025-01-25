@@ -52,7 +52,7 @@ type SecurityGroupRuleListResult[T cloud.SecurityGroupRule] struct {
 
 // ListSecurityGroupRuleCountReq define security group list count request.
 type ListSecurityGroupRuleCountReq struct {
-	SecurityGroupIDs []string `json:"security_group_ids" validate:"required,min=1"`
+	SecurityGroupIDs []string `json:"security_group_ids" validate:"required,min=1,max=500"`
 }
 
 // Validate security group list request.
