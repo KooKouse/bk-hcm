@@ -125,21 +125,22 @@ type TaskManagement struct {
 
 // CloudServerSetting defines cloud server used setting options.
 type CloudServerSetting struct {
-	Network        Network        `yaml:"network"`
-	Service        Service        `yaml:"service"`
-	Log            LogOption      `yaml:"log"`
-	Crypto         Crypto         `yaml:"crypto"`
-	Esb            Esb            `yaml:"esb"`
-	BkHcmUrl       string         `yaml:"bkHcmUrl"`
-	CloudResource  CloudResource  `yaml:"cloudResource"`
-	Recycle        Recycle        `yaml:"recycle"`
-	BillConfig     BillConfig     `yaml:"billConfig"`
-	Itsm           ApiGateway     `yaml:"itsm"`
-	CloudSelection CloudSelection `yaml:"cloudSelection"`
-	Cmsi           CMSI           `yaml:"cmsi"`
-	TaskManagement TaskManagement `yaml:"taskManagement"`
-	Tenant         TenantConfig   `yaml:"tenant"`
-	Cmdb           ApiGateway     `yaml:"cmdb"`
+	Network         Network         `yaml:"network"`
+	Service         Service         `yaml:"service"`
+	Log             LogOption       `yaml:"log"`
+	Crypto          Crypto          `yaml:"crypto"`
+	Esb             Esb             `yaml:"esb"`
+	BkHcmUrl        string          `yaml:"bkHcmUrl"`
+	CloudResource   CloudResource   `yaml:"cloudResource"`
+	Recycle         Recycle         `yaml:"recycle"`
+	BillConfig      BillConfig      `yaml:"billConfig"`
+	Itsm            ApiGateway      `yaml:"itsm"`
+	CloudSelection  CloudSelection  `yaml:"cloudSelection"`
+	Cmsi            CMSI            `yaml:"cmsi"`
+	TaskManagement  TaskManagement  `yaml:"taskManagement"`
+	Tenant          TenantConfig    `yaml:"tenant"`
+	Cmdb            ApiGateway      `yaml:"cmdb"`
+	CLBImportConfig CLBImportConfig `yaml:"clbImportConfig"`
 }
 
 // trySetFlagBindIP try set flag bind ip.
@@ -152,6 +153,7 @@ func (s *CloudServerSetting) trySetDefault() {
 	s.Network.trySetDefault()
 	s.Service.trySetDefault()
 	s.Log.trySetDefault()
+	s.CLBImportConfig.trySetDefault()
 
 	return
 }
@@ -214,7 +216,7 @@ type DataServiceSetting struct {
 	Database    DataBase     `yaml:"database"`
 	Objectstore ObjectStore  `yaml:"objectstore"`
 	Crypto      Crypto       `yaml:"crypto"`
-	Cmdb        ApiGateway  `yaml:"cmdb"`
+	Cmdb        ApiGateway   `yaml:"cmdb"`
 	Tenant      TenantConfig `yaml:"tenant"`
 }
 
@@ -310,11 +312,11 @@ func (s *HCServiceSetting) TenantEnable() bool {
 
 // AuthServerSetting defines auth server used setting options.
 type AuthServerSetting struct {
-	Network Network    `yaml:"network"`
-	Service Service    `yaml:"service"`
-	Log     LogOption  `yaml:"log"`
-	Esb     Esb        `yaml:"esb"`
-	Cmdb    ApiGateway `yaml:"cmdb"`
+	Network Network      `yaml:"network"`
+	Service Service      `yaml:"service"`
+	Log     LogOption    `yaml:"log"`
+	Esb     Esb          `yaml:"esb"`
+	Cmdb    ApiGateway   `yaml:"cmdb"`
 	Tenant  TenantConfig `yaml:"tenant"`
 
 	IAM IAM `yaml:"iam"`

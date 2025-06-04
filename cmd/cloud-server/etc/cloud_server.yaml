@@ -298,3 +298,6 @@ cmdb:
     caFile:
     # the password to decrypt the certificate.
     password:
+
+clbImportConfig:
+  concurrentCount: 10

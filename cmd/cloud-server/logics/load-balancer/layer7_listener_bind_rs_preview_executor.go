@@ -26,10 +26,13 @@ import (
 	"strings"
 
 	cloudCvm "hcm/pkg/api/core/cloud/cvm"
+	corelb "hcm/pkg/api/core/cloud/load-balancer"
+	"hcm/pkg/cc"
 	dataservice "hcm/pkg/client/data-service"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/kit"
 	"hcm/pkg/logs"
+	"hcm/pkg/tools/concurrence"
 	"hcm/pkg/tools/converter"
 	"hcm/pkg/tools/slice"
 )
@@ -146,51 +149,57 @@ func (l *Layer7ListenerBindRSPreviewExecutor) validate(kt *kit.Kit) error {
 func (l *Layer7ListenerBindRSPreviewExecutor) validateWithDB(kt *kit.Kit, cloudIDs []string) error {
 	lbMap, err := getLoadBalancersMapByCloudID(kt, l.dataServiceCli, l.vendor, l.accountID, l.bkBizID, cloudIDs)
 	if err != nil {
+		logs.Errorf("get load balancers map by cloud id failed, err: %v, rid: %s", err, kt.Rid)
 		return err
 	}
 
-	for _, detail := range l.details {
-		lb, ok := lbMap[detail.CloudClbID]
-		if !ok {
-			return fmt.Errorf("clb(%s) not exist", detail.CloudClbID)
-		}
-		if _, ok = l.regionIDMap[lb.Region]; !ok {
-			return fmt.Errorf("clb region not match, clb.region: %s, input: %v", lb.Region, l.regionIDMap)
-		}
+	concurrentErr := concurrence.BaseExec(cc.CloudServer().CLBImportConfig.ConcurrentCount, l.details,
+		func(detail *Layer7ListenerBindRSDetail) error {
+			lb, ok := lbMap[detail.CloudClbID]
+			if !ok {
+				return fmt.Errorf("clb(%s) not exist", detail.CloudClbID)
+			}
+			if _, ok = l.regionIDMap[lb.Region]; !ok {
+				return fmt.Errorf("clb region not match, clb.region: %s, input: %v", lb.Region, l.regionIDMap)
+			}
 
-		ipSet := append(lb.PrivateIPv4Addresses, lb.PrivateIPv6Addresses...)
-		ipSet = append(ipSet, lb.PublicIPv4Addresses...)
-		ipSet = append(ipSet, lb.PublicIPv6Addresses...)
-		if detail.ClbVipDomain != lb.Domain && !slice.IsItemInSlice(ipSet, detail.ClbVipDomain) {
-			detail.Status.SetNotExecutable()
-			detail.ValidateResult = append(detail.ValidateResult,
-				fmt.Sprintf("clb vip(%s) not match", detail.ClbVipDomain))
-			continue
-		}
-		detail.RegionID = lb.Region
+			ipSet := append(lb.PrivateIPv4Addresses, lb.PrivateIPv6Addresses...)
+			ipSet = append(ipSet, lb.PublicIPv4Addresses...)
+			ipSet = append(ipSet, lb.PublicIPv6Addresses...)
+			if detail.ClbVipDomain != lb.Domain && !slice.IsItemInSlice(ipSet, detail.ClbVipDomain) {
+				detail.Status.SetNotExecutable()
+				detail.ValidateResult = append(detail.ValidateResult,
+					fmt.Sprintf("clb vip(%s) not match", detail.ClbVipDomain))
+			}
+			detail.RegionID = lb.Region
 
-		lblCloudID, err := l.validateListener(kt, detail)
-		if err != nil {
-			logs.Errorf("validate listener failed, err: %v, rid: %s", err, kt.Rid)
-			return err
-		}
+			lblCloudID, err := l.validateListener(kt, detail)
+			if err != nil {
+				logs.Errorf("validate listener failed, err: %v, rid: %s", err, kt.Rid)
+				return err
+			}
 
-		ruleCloudID, err := l.validateURLRule(kt, lb.CloudID, lblCloudID, detail)
-		if err != nil {
-			logs.Errorf("validate url rule failed, err: %v, rid: %s", err, kt.Rid)
-			return err
-		}
+			ruleCloudID, err := l.validateURLRule(kt, lb.CloudID, lblCloudID, detail)
+			if err != nil {
+				logs.Errorf("validate url rule failed, err: %v, rid: %s", err, kt.Rid)
+				return err
+			}
 
-		instID, err := l.validateRS(kt, detail, lb.ID)
-		if err != nil {
-			logs.Errorf("validate rs failed, err: %v, rid: %s", err, kt.Rid)
-			return err
-		}
+			instID, err := l.validateRS(kt, detail, lb)
+			if err != nil {
+				logs.Errorf("validate rs failed, err: %v, rid: %s", err, kt.Rid)
+				return err
+			}
 
-		if err = l.validateTarget(kt, lb.ID, detail, ruleCloudID, instID, detail.RsPort[0]); err != nil {
-			logs.Errorf("validate target failed, err: %v, rid: %s", err, kt.Rid)
-			return err
-		}
+			if err = l.validateTarget(kt, lb.ID, detail, ruleCloudID, instID, detail.RsPort[0]); err != nil {
+				logs.Errorf("validate target failed, err: %v, rid: %s", err, kt.Rid)
+				return err
+			}
+			return nil
+		})
+	if concurrentErr != nil {
+		logs.Errorf("validate details failed, err: %v, rid: %s", concurrentErr, kt.Rid)
+		return concurrentErr
 	}
 	return nil
 }
@@ -226,23 +235,24 @@ func (l *Layer7ListenerBindRSPreviewExecutor) validateTarget(kt *kit.Kit, lbID s
 	return nil
 }
 
-func (l *Layer7ListenerBindRSPreviewExecutor) validateRS(kt *kit.Kit,
-	curDetail *Layer7ListenerBindRSDetail, lbID string) (string, error) {
+func (l *Layer7ListenerBindRSPreviewExecutor) validateRS(kt *kit.Kit, curDetail *Layer7ListenerBindRSDetail,
+	lb corelb.LoadBalancerRaw) (string, error) {
 
 	if curDetail.InstType == enumor.EniInstType {
 		// ENI 不做校验
 		return "", nil
 	}
 
-	lb, err := getTCloudLoadBalancer(kt, l.dataServiceCli, lbID)
+	isCrossRegionV1, isCrossRegionV2, targetCloudVpcID, lbTargetRegion, err := parseSnapInfoTCloudLBExtension(kt,
+		lb.Extension)
 	if err != nil {
+		logs.Errorf("parse snap info for tcloud lb extension failed, err: %v, rid: %s", err, kt.Rid)
 		return "", err
 	}
+
 	cloudVpcIDs := []string{lb.CloudVpcID}
-	isCrossRegionV1 := lb.Extension.SupportCrossRegionV1()
-	isCrossRegionV2 := converter.PtrToVal(lb.Extension.SnatPro)
 	if isCrossRegionV1 {
-		cloudVpcIDs = append(cloudVpcIDs, converter.PtrToVal(lb.Extension.TargetCloudVpcID))
+		cloudVpcIDs = append(cloudVpcIDs, targetCloudVpcID)
 	}
 
 	cvm, err := getCvm(kt, l.dataServiceCli, curDetail.RsIp, l.vendor, l.bkBizID, l.accountID, cloudVpcIDs)
@@ -250,12 +260,17 @@ func (l *Layer7ListenerBindRSPreviewExecutor) validateRS(kt *kit.Kit,
 		return "", err
 	}
 	if cvm == nil {
+		if isCrossRegionV2 {
+			// 跨域2.0 如果找不到cvm主机则不进行后续的校验，由云上接口兜底
+			return "", nil
+		}
 		// 找不到对应的CVM, 根据IP查询CVM完善报错
 		return "", l.fillRSValidateCvmNotFoundError(kt, curDetail, lb.CloudVpcID)
 	}
 	targetRegion := lb.Region
 	if isCrossRegionV1 {
-		targetRegion = converter.PtrToVal(lb.Extension.TargetRegion)
+		// 跨域1.0 校验 extension中的 target region
+		targetRegion = lbTargetRegion
 	}
 	// 支持跨域1.0 校验 target region
 	// 支持跨域2.0 不校验
