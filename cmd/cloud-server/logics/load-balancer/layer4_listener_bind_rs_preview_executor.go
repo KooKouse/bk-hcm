@@ -20,16 +20,21 @@
 package lblogic
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	cloudCvm "hcm/pkg/api/core/cloud/cvm"
+	corelb "hcm/pkg/api/core/cloud/load-balancer"
 	dataservice "hcm/pkg/client/data-service"
 	"hcm/pkg/criteria/enumor"
 	"hcm/pkg/kit"
 	"hcm/pkg/logs"
+	"hcm/pkg/tools/concurrence"
 	"hcm/pkg/tools/converter"
 	"hcm/pkg/tools/slice"
 )
@@ -148,7 +153,16 @@ func (l *Layer4ListenerBindRSPreviewExecutor) validateWithDB(kt *kit.Kit, cloudI
 		return err
 	}
 
-	for _, detail := range l.details {
+	lbIDs := make([]string, 0, len(lbMap))
+	for _, lb := range lbMap {
+		lbIDs = append(lbIDs, lb.ID)
+	}
+
+	var totalGoroutineDuration int64
+	var goroutineCount int64
+	concurrentErr := concurrence.BaseExec(10, l.details, func(detail *Layer4ListenerBindRSDetail) error {
+		goroutineStartTime := time.Now()
+
 		lb, ok := lbMap[detail.CloudClbID]
 		if !ok {
 			return fmt.Errorf("clb(%s) not exist", detail.CloudClbID)
@@ -164,7 +178,7 @@ func (l *Layer4ListenerBindRSPreviewExecutor) validateWithDB(kt *kit.Kit, cloudI
 			detail.Status.SetNotExecutable()
 			detail.ValidateResult = append(detail.ValidateResult,
 				fmt.Sprintf("clb vip(%s)not match", detail.ClbVipDomain))
-			continue
+			return nil
 		}
 		detail.RegionID = lb.Region
 
@@ -174,7 +188,7 @@ func (l *Layer4ListenerBindRSPreviewExecutor) validateWithDB(kt *kit.Kit, cloudI
 			return err
 		}
 
-		instID, err := l.validateRS(kt, detail, lb.ID)
+		instID, err := l.validateRS(kt, detail, lb)
 		if err != nil {
 			logs.Errorf("validate rs failed, err: %v, rid: %s", err, kt.Rid)
 			return err
@@ -184,7 +198,69 @@ func (l *Layer4ListenerBindRSPreviewExecutor) validateWithDB(kt *kit.Kit, cloudI
 			logs.Errorf("validate target failed, err: %v, rid: %s", err, kt.Rid)
 			return err
 		}
+
+		goroutineDuration := time.Since(goroutineStartTime)
+		atomic.AddInt64(&totalGoroutineDuration, goroutineDuration.Nanoseconds())
+		atomic.AddInt64(&goroutineCount, 1)
+		fmt.Printf("Goroutine for clb %s took %s, rid: %s\n", detail.CloudClbID, goroutineDuration, kt.Rid)
+		averageGoroutineTime := time.Duration(totalGoroutineDuration / goroutineCount)
+		fmt.Printf("Average goroutine execution time: %s for %d goroutines, rid: %s\n", averageGoroutineTime, goroutineCount, kt.Rid)
+
+		return nil
+	})
+	if concurrentErr != nil {
+		return concurrentErr
 	}
+
+	if goroutineCount > 0 {
+		averageGoroutineTime := time.Duration(totalGoroutineDuration / goroutineCount)
+		fmt.Printf("Average goroutine execution time: %s for %d goroutines, rid: %s\n", averageGoroutineTime, goroutineCount, kt.Rid)
+	}
+	//for _, detail := range l.details {
+	//	iterationStartTime := time.Now()
+	//
+	//	lb, ok := lbMap[detail.CloudClbID]
+	//	if !ok {
+	//		return fmt.Errorf("clb(%s) not exist", detail.CloudClbID)
+	//	}
+	//	if _, ok = l.regionIDMap[lb.Region]; !ok {
+	//		return fmt.Errorf("clb region not match, clb.region: %s, input: %v", lb.Region, l.regionIDMap)
+	//	}
+	//
+	//	ipSet := append(lb.PrivateIPv4Addresses, lb.PrivateIPv6Addresses...)
+	//	ipSet = append(ipSet, lb.PublicIPv4Addresses...)
+	//	ipSet = append(ipSet, lb.PublicIPv6Addresses...)
+	//	if detail.ClbVipDomain != lb.Domain && !slice.IsItemInSlice(ipSet, detail.ClbVipDomain) {
+	//		detail.Status.SetNotExecutable()
+	//		detail.ValidateResult = append(detail.ValidateResult,
+	//			fmt.Sprintf("clb vip(%s)not match", detail.ClbVipDomain))
+	//		continue
+	//	}
+	//	detail.RegionID = lb.Region
+	//
+	//	lblCloudID, err := l.validateListener(kt, detail)
+	//	if err != nil {
+	//		logs.Errorf("validate listener failed, err: %v, rid: %s", err, kt.Rid)
+	//		return err
+	//	}
+	//
+	//	instID, err := l.validateRS(kt, detail, lb.ID, tcloudLBMap)
+	//	if err != nil {
+	//		logs.Errorf("validate rs failed, err: %v, rid: %s", err, kt.Rid)
+	//		return err
+	//	}
+	//
+	//	if err = l.validateTarget(kt, detail, lblCloudID, instID, detail.RsPort[0]); err != nil {
+	//		logs.Errorf("validate target failed, err: %v, rid: %s", err, kt.Rid)
+	//		return err
+	//	}
+	//
+	//	iterationDuration := time.Since(iterationStartTime)
+	//	totalIterationDuration += iterationDuration
+	//	iterationCount++
+	//	fmt.Printf("Iteration %d took %s. Average iteration time: %s, rid: %s\n", iterationCount, iterationDuration,
+	//		totalIterationDuration/time.Duration(iterationCount), kt.Rid)
+	//}
 	return nil
 }
 
@@ -220,46 +296,68 @@ func (l *Layer4ListenerBindRSPreviewExecutor) validateTarget(kt *kit.Kit, detail
 	return nil
 }
 
-func (l *Layer4ListenerBindRSPreviewExecutor) validateRS(kt *kit.Kit,
-	curDetail *Layer4ListenerBindRSDetail, lbID string) (string, error) {
+func (l *Layer4ListenerBindRSPreviewExecutor) validateRS(kt *kit.Kit, curDetail *Layer4ListenerBindRSDetail,
+	lb corelb.LoadBalancerRaw) (string, error) {
 
 	if curDetail.InstType == enumor.EniInstType {
 		// ENI 不做校验
 		return "", nil
 	}
 
-	lb, err := getTCloudLoadBalancer(kt, l.dataServiceCli, lbID)
+	cloudVpcIDs := []string{lb.CloudVpcID}
+	isCrossRegionV1, isCrossRegionV2, targetCloudVpcID, lbTargetRegion, err := parseSnapInfoTCloudLBExtension(kt,
+		lb.Extension)
 	if err != nil {
+		logs.Errorf("parse snap info for tcloud lb extension failed, err: %v, rid: %s", err, kt.Rid)
 		return "", err
 	}
-	cloudVpcIDs := []string{lb.CloudVpcID}
-	isSnap := converter.PtrToVal(lb.Extension.Snat)
-	isSnapPro := converter.PtrToVal(lb.Extension.SnatPro)
-	if isSnap {
-		cloudVpcIDs = append(cloudVpcIDs, converter.PtrToVal(lb.Extension.TargetCloudVpcID))
+	if isCrossRegionV2 {
+		// 跨域2.0 本地无法校验，因此此处不进行校验，由云上接口判断
+		return "", nil
+	}
+	if isCrossRegionV1 {
+		cloudVpcIDs = append(cloudVpcIDs, targetCloudVpcID)
 	}
 
 	cvm, err := getCvm(kt, l.dataServiceCli, curDetail.RsIp, l.vendor, l.bkBizID, l.accountID, cloudVpcIDs)
 	if err != nil {
 		return "", err
 	}
-	if cvm == nil && isSnapPro {
-		// 跨域2.0 如果找不到cvm主机则不进行后续的校验，由云上接口兜底
-		return "", nil
-	}
 	if cvm == nil {
 		// 找不到对应的CVM, 根据IP查询CVM完善报错
 		return "", l.fillRSValidateCvmNotFoundError(kt, curDetail, lb.CloudVpcID)
 	}
-	if !(isSnap || isSnapPro) && cvm.Region != lb.Region {
-		// 非跨域情况下才校验region
+	targetRegion := lb.Region
+	if isCrossRegionV1 {
+		// 跨域1.0 校验 extension中的 target region
+		targetRegion = lbTargetRegion
+	}
+	if cvm.Region != targetRegion {
 		curDetail.Status.SetNotExecutable()
 		curDetail.ValidateResult = append(curDetail.ValidateResult,
-			fmt.Sprintf("rs(%s) region not match, rs.region: %s, lb.region: %v", curDetail.RsIp, cvm.Region, lb.Region))
+			fmt.Sprintf("rs(%s) region not match, rs.region: %s, lb.region: %v",
+				curDetail.RsIp, cvm.Region, lb.Region))
 		return cvm.CloudID, nil
 	}
 
 	return cvm.CloudID, nil
+}
+
+func parseSnapInfoTCloudLBExtension(kt *kit.Kit, raw json.RawMessage) (
+	isCrossRegionV1, isCrossRegionV2 bool, targetCloudVpcID, lbTargetRegion string, err error) {
+
+	extension := corelb.TCloudClbExtension{}
+	err = json.Unmarshal(raw, &extension)
+	if err != nil {
+		logs.Errorf("fail parse lb extension for delete protection, err: %v, rid: %s", err, kt.Rid)
+		return
+	}
+
+	isCrossRegionV1 = extension.SupportCrossRegionV1()
+	isCrossRegionV2 = converter.PtrToVal(extension.SnatPro)
+	targetCloudVpcID = converter.PtrToVal(extension.TargetCloudVpcID)
+	lbTargetRegion = converter.PtrToVal(extension.TargetRegion)
+	return
 }
 
 func (l *Layer4ListenerBindRSPreviewExecutor) fillRSValidateCvmNotFoundError(

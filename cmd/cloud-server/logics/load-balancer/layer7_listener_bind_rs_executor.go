@@ -179,7 +179,8 @@ func (c *Layer7ListenerBindRSExecutor) buildFlows(kt *kit.Kit) ([]string, error)
 	return flowIDs, nil
 }
 
-func (c *Layer7ListenerBindRSExecutor) buildFlow(kt *kit.Kit, lb corelb.BaseLoadBalancer, details []*layer7ListenerBindRSTaskDetail) (string, error) {
+func (c *Layer7ListenerBindRSExecutor) buildFlow(kt *kit.Kit, lb corelb.LoadBalancerRaw,
+	details []*layer7ListenerBindRSTaskDetail) (string, error) {
 
 	// 将details根据targetGroupID进行分组，以targetGroupID的纬度创建flowTask
 	tgToDetails, tgToListenerCloudIDs, tgToCloudRuleIDs, err := c.taskDetailsGroupByTargetGroup(kt, lb.CloudID, details)
@@ -264,7 +265,7 @@ func (c *Layer7ListenerBindRSExecutor) taskDetailsGroupByTargetGroup(kt *kit.Kit
 	return tgToDetails, tgToListenerCloudID, tgToCloudRuleIDs, nil
 }
 
-func (c *Layer7ListenerBindRSExecutor) buildFlowTask(kt *kit.Kit, lb corelb.BaseLoadBalancer,
+func (c *Layer7ListenerBindRSExecutor) buildFlowTask(kt *kit.Kit, lb corelb.LoadBalancerRaw,
 	targetGroupID string, details []*layer7ListenerBindRSTaskDetail,
 	generator func() (cur string, prev string), tgToListenerCloudIDs map[string]string,
 	tgToCloudRuleIDs map[string]string) ([]ts.CustomFlowTask, error) {
@@ -277,7 +278,7 @@ func (c *Layer7ListenerBindRSExecutor) buildFlowTask(kt *kit.Kit, lb corelb.Base
 	}
 }
 
-func (c *Layer7ListenerBindRSExecutor) buildTCloudFlowTask(kt *kit.Kit, lb corelb.BaseLoadBalancer,
+func (c *Layer7ListenerBindRSExecutor) buildTCloudFlowTask(kt *kit.Kit, lb corelb.LoadBalancerRaw,
 	targetGroupID string, details []*layer7ListenerBindRSTaskDetail, generator func() (cur string, prev string),
 	tgToListenerCloudIDs map[string]string, tgToCloudRuleIDs map[string]string) ([]ts.CustomFlowTask, error) {
 
