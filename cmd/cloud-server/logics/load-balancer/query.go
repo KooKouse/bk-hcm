@@ -33,7 +33,6 @@ import (
 	"hcm/pkg/kit"
 	"hcm/pkg/logs"
 	"hcm/pkg/runtime/filter"
-	"hcm/pkg/tools/converter"
 	"hcm/pkg/tools/slice"
 )
 
@@ -204,6 +203,35 @@ func getTargetGroupID(kt *kit.Kit, cli *dataservice.Client, lbID string, ruleClo
 	return rel.Details[0].TargetGroupID, nil
 }
 
+func getTGListenerRelsByRuleCloudIDs(kt *kit.Kit, cli *dataservice.Client, lbID string, ruleCloudIDs []string) (
+	tgIDToRuleID map[string]string, ruleCloudIDToTgID map[string]string, err error) {
+
+	tgIDToRuleID = make(map[string]string, len(ruleCloudIDs))
+	ruleCloudIDToTgID = make(map[string]string, len(ruleCloudIDs))
+	for _, batch := range slice.Split(ruleCloudIDs, int(core.DefaultMaxPageLimit)) {
+		listReq := &core.ListReq{
+			Fields: []string{"target_group_id", "cloud_listener_rule_id"},
+			Page:   core.NewDefaultBasePage(),
+			Filter: tools.ExpressionAnd(
+				tools.RuleEqual("lb_id", lbID),
+				tools.RuleIn("cloud_listener_rule_id", batch),
+			),
+		}
+		rel, err := cli.Global.LoadBalancer.ListTargetGroupListenerRel(kt, listReq)
+		if err != nil {
+			logs.Errorf("list target group listener rel failed, err: %v, rid: %s", err, kt.Rid)
+			return nil, nil, err
+		}
+
+		for _, item := range rel.Details {
+			ruleCloudIDToTgID[item.CloudListenerRuleID] = item.TargetGroupID
+			tgIDToRuleID[item.TargetGroupID] = item.CloudListenerRuleID
+		}
+	}
+
+	return tgIDToRuleID, ruleCloudIDToTgID, nil
+}
+
 func getCvm(kt *kit.Kit, cli *dataservice.Client, ip string,
 	vendor enumor.Vendor, bkBizID int64, accountID string, cloudVPCs []string) (*corecvm.BaseCvm, error) {
 
@@ -284,12 +312,18 @@ func getTCloudLoadBalancer(kt *kit.Kit, cli *dataservice.Client, lbID string) (
 // validateCvmExist 导入新RS前, 校验云主机是否存在
 // 开启了跨域2.0的主机, 不进行vpc校验, 由云上进行报错
 func validateCvmExist(kt *kit.Kit, dataServiceCli *dataservice.Client, rsIP string, vendor enumor.Vendor,
-	bkBizID int64, accountID string, tcloudLB *corelb.LoadBalancer[corelb.TCloudClbExtension]) (
+	bkBizID int64, accountID string, lb corelb.LoadBalancerRaw) (
 	*corecvm.BaseCvm, error) {
 
 	var cvm *corecvm.BaseCvm
 	var err error
-	if converter.PtrToVal(tcloudLB.Extension.SnatPro) {
+	isCrossRegionV1, isCrossRegionV2, targetCloudVpcID, _, err := parseSnapInfoTCloudLBExtension(kt,
+		lb.Extension)
+	if err != nil {
+		logs.Errorf("parse snap info for tcloud lb extension failed, err: %v, rid: %s", err, kt.Rid)
+		return nil, err
+	}
+	if isCrossRegionV2 {
 		cvmList, err := getCvmWithoutVpc(kt, dataServiceCli, rsIP, vendor, bkBizID, accountID)
 		if err != nil {
 			logs.Errorf("get cvm without vpc failed, ip: %s, err: %v, rid: %s", rsIP, err, kt.Rid)
@@ -302,9 +336,9 @@ func validateCvmExist(kt *kit.Kit, dataServiceCli *dataservice.Client, rsIP stri
 		return cvm, nil
 	}
 
-	cloudVpcIDs := []string{tcloudLB.CloudVpcID}
-	if tcloudLB.Extension.SupportCrossRegionV1() {
-		cloudVpcIDs = append(cloudVpcIDs, converter.PtrToVal(tcloudLB.Extension.TargetCloudVpcID))
+	cloudVpcIDs := []string{lb.CloudVpcID}
+	if isCrossRegionV1 {
+		cloudVpcIDs = append(cloudVpcIDs, targetCloudVpcID)
 	}
 
 	cvm, err = getCvm(kt, dataServiceCli, rsIP, vendor, bkBizID, accountID, cloudVpcIDs)

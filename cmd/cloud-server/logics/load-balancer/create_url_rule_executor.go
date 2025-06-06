@@ -25,6 +25,7 @@ import (
 
 	actionlb "hcm/cmd/task-server/logics/action/load-balancer"
 	actionflow "hcm/cmd/task-server/logics/flow"
+	"hcm/pkg/api/core"
 	corelb "hcm/pkg/api/core/cloud/load-balancer"
 	"hcm/pkg/api/data-service/task"
 	hclb "hcm/pkg/api/hc-service/load-balancer"
@@ -422,21 +423,23 @@ func (c *CreateUrlRuleExecutor) updateTaskDetails(kt *kit.Kit) error {
 	if len(c.taskDetails) == 0 {
 		return nil
 	}
-	updateItems := make([]task.UpdateTaskDetailField, 0, len(c.taskDetails))
-	for _, detail := range c.taskDetails {
-		updateItems = append(updateItems, task.UpdateTaskDetailField{
-			ID:            detail.taskDetailID,
-			FlowID:        detail.flowID,
-			TaskActionIDs: []string{detail.actionID},
-		})
-	}
-	updateDetailsReq := &task.UpdateDetailReq{
-		Items: updateItems,
-	}
-	err := c.dataServiceCli.Global.TaskDetail.Update(kt, updateDetailsReq)
-	if err != nil {
-		logs.Errorf("update task details failed, err: %v, rid: %s", err, kt.Rid)
-		return err
+	for _, batch := range slice.Split(c.taskDetails, int(core.DefaultMaxPageLimit)) {
+		updateItems := make([]task.UpdateTaskDetailField, 0, len(c.taskDetails))
+		for _, detail := range batch {
+			updateItems = append(updateItems, task.UpdateTaskDetailField{
+				ID:            detail.taskDetailID,
+				FlowID:        detail.flowID,
+				TaskActionIDs: []string{detail.actionID},
+			})
+		}
+		updateDetailsReq := &task.UpdateDetailReq{
+			Items: updateItems,
+		}
+		err := c.dataServiceCli.Global.TaskDetail.Update(kt, updateDetailsReq)
+		if err != nil {
+			logs.Errorf("update task details failed, err: %v, rid: %s", err, kt.Rid)
+			return err
+		}
 	}
 	return nil
 }
