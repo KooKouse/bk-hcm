@@ -130,7 +130,7 @@ func NewService(sd serviced.ServiceDiscover) (*Service, error) {
 
 	go appcvm.TimingHandleDeliverApplication(svr.client, 2*time.Second)
 
-	go task.TimingHandleTaskMgmtState(apiClientSet, sd, time.Second)
+	//go task.TimingHandleTaskMgmtState(apiClientSet, sd, time.Second)
 
 	return svr, nil
 }

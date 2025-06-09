@@ -22,6 +22,8 @@ package lblogic
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
+	"sync/atomic"
 
 	actionlb "hcm/cmd/task-server/logics/action/load-balancer"
 	actionflow "hcm/cmd/task-server/logics/flow"
@@ -31,6 +33,7 @@ import (
 	hclb "hcm/pkg/api/hc-service/load-balancer"
 	ts "hcm/pkg/api/task-server"
 	"hcm/pkg/async/action"
+	"hcm/pkg/cc"
 	dataservice "hcm/pkg/client/data-service"
 	taskserver "hcm/pkg/client/task-server"
 	"hcm/pkg/criteria/constant"
@@ -38,6 +41,7 @@ import (
 	tableasync "hcm/pkg/dal/table/async"
 	"hcm/pkg/kit"
 	"hcm/pkg/logs"
+	"hcm/pkg/tools/concurrence"
 	"hcm/pkg/tools/converter"
 	"hcm/pkg/tools/counter"
 	"hcm/pkg/tools/slice"
@@ -67,9 +71,11 @@ type Layer7ListenerBindRSExecutor struct {
 }
 
 type layer7ListenerBindRSTaskDetail struct {
-	taskDetailID string
-	flowID       string
-	actionID     string
+	taskDetailID    string
+	flowID          string
+	actionID        string
+	listenerCloudID string
+	ruleCloudID     string
 	*Layer7ListenerBindRSDetail
 }
 
@@ -237,38 +243,59 @@ func (c *Layer7ListenerBindRSExecutor) taskDetailsGroupByTargetGroup(kt *kit.Kit
 	details []*layer7ListenerBindRSTaskDetail) (map[string][]*layer7ListenerBindRSTaskDetail, map[string]string,
 	map[string]string, error) {
 
+	concurrentErr := concurrence.BaseExec(cc.CloudServer().CLBImportConfig.ConcurrentCount, details,
+		func(detail *layer7ListenerBindRSTaskDetail) error {
+			listener, err := getListener(kt, c.dataServiceCli, c.accountID, lbCloudID, detail.Protocol,
+				detail.ListenerPort[0], c.bkBizID, c.vendor)
+			if err != nil {
+				logs.Errorf("get listener failed, err: %v, rid: %s", err, kt.Rid)
+				return err
+			}
+			if listener == nil {
+				return fmt.Errorf("loadbalancer(%s) listener(%v) not found",
+					detail.CloudClbID, detail.ListenerPort)
+			}
+
+			rule, err := getURLRule(kt, c.dataServiceCli, c.vendor,
+				lbCloudID, listener.CloudID, detail.Domain, detail.URLPath)
+			if err != nil {
+				logs.Errorf("get url rule failed, err: %v, rid: %s", err, kt.Rid)
+				return err
+			}
+			detail.ruleCloudID = rule.CloudID
+			detail.listenerCloudID = listener.CloudID
+
+			return nil
+		})
+	if concurrentErr != nil {
+		logs.Errorf("get listener failed, err: %v, rid: %s", concurrentErr, kt.Rid)
+		return nil, nil, nil, concurrentErr
+	}
+
+	tgToRuleCloudID, ruleCloudIDToTgID, err := getTGListenerRelsByRuleCloudIDs(kt, c.dataServiceCli,
+		lbID, slice.Map(details, func(detail *layer7ListenerBindRSTaskDetail) string {
+			return detail.ruleCloudID
+		}))
+	if err != nil {
+		logs.Errorf("get target group listener relations by rule cloudIDs failed, err: %v, rid: %s", err, kt.Rid)
+		return nil, nil, nil, err
+	}
+
 	tgToDetails := make(map[string][]*layer7ListenerBindRSTaskDetail)
 	tgToListenerCloudID := make(map[string]string)
-	tgToCloudRuleIDs := make(map[string]string)
 	for _, detail := range details {
-		listener, err := getListener(kt, c.dataServiceCli, c.accountID, lbCloudID, detail.Protocol,
-			detail.ListenerPort[0], c.bkBizID, c.vendor)
-		if err != nil {
-			logs.Errorf("get listener failed, err: %v, rid: %s", err, kt.Rid)
-			return nil, nil, nil, err
+		tgID, ok := ruleCloudIDToTgID[detail.ruleCloudID]
+		if !ok {
+			logs.Errorf("tg not found for listener cloudID: %s, rule cloudID: %s, lbID: %s, rid: %s",
+				detail.listenerCloudID, detail.ruleCloudID, lbID, kt.Rid)
+			return nil, nil, nil, fmt.Errorf("tg not found for listener cloudID: %s, rule cloudID: %s, lbID: %s",
+				detail.listenerCloudID, detail.ruleCloudID, lbID)
 		}
-		if listener == nil {
-			return nil, nil, nil, fmt.Errorf("loadbalancer(%s) listener(%v) not found",
-				detail.CloudClbID, detail.ListenerPort)
-		}
-
-		rule, err := getURLRule(kt, c.dataServiceCli, c.vendor,
-			lbCloudID, listener.CloudID, detail.Domain, detail.URLPath)
-		if err != nil {
-			logs.Errorf("get url rule failed, err: %v, rid: %s", err, kt.Rid)
-			return nil, nil, nil, err
-		}
-
-		targetGroupID, err := getTargetGroupID(kt, c.dataServiceCli, lbID, rule.CloudID)
-		if err != nil {
-			logs.Errorf("get target group id failed, rule(%s),err: %v, rid: %s", rule.CloudID, err, kt.Rid)
-			return nil, nil, nil, err
-		}
-		tgToListenerCloudID[targetGroupID] = listener.CloudID
-		tgToCloudRuleIDs[targetGroupID] = rule.CloudID
-		tgToDetails[targetGroupID] = append(tgToDetails[targetGroupID], detail)
+		tgToDetails[tgID] = append(tgToDetails[tgID], detail)
+		tgToListenerCloudID[tgID] = detail.listenerCloudID
 	}
-	return tgToDetails, tgToListenerCloudID, tgToCloudRuleIDs, nil
+
+	return tgToDetails, tgToListenerCloudID, tgToRuleCloudID, nil
 }
 
 func (c *Layer7ListenerBindRSExecutor) buildFlowTask(kt *kit.Kit, lb corelb.LoadBalancerRaw,
@@ -297,32 +324,64 @@ func (c *Layer7ListenerBindRSExecutor) buildTCloudFlowTask(kt *kit.Kit, lb corel
 	for _, taskDetails := range slice.Split(details, constant.BatchTaskMaxLimit) {
 		cur, prev := generator()
 
-		targets := make([]*hclb.RegisterTarget, 0, len(taskDetails))
-		for _, detail := range taskDetails {
-			target := &hclb.RegisterTarget{
-				TargetType: detail.InstType,
-				Port:       int64(detail.RsPort[0]),
-				Weight:     converter.ValToPtr(int64(converter.PtrToVal(detail.Weight))),
-			}
-			if detail.InstType == enumor.EniInstType {
-				target.EniIp = detail.RsIp
-			}
+		targetChan := make(chan *hclb.RegisterTarget, len(taskDetails))
+		var wg sync.WaitGroup
+		semaphore := make(chan struct{}, cc.CloudServer().CLBImportConfig.ConcurrentCount)
+		var firstError atomic.Value
 
-			if detail.InstType == enumor.CvmInstType && !converter.PtrToVal(tCloudLB.Extension.SnatPro) {
-				cvm, err := validateCvmExist(kt,
-					c.dataServiceCli, detail.RsIp, c.vendor, c.bkBizID, c.accountID, lb)
-				if err != nil {
-					logs.Errorf("validate cvm exist failed, ip: %s, err: %v, rid: %s", detail.RsIp, err, kt.Rid)
-					return nil, err
+		for _, detail := range taskDetails {
+			wg.Add(1)
+			go func(d *layer7ListenerBindRSTaskDetail) {
+				defer wg.Done()
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
+
+				if firstError.Load() != nil {
+					return
 				}
 
-				target.CloudInstID = cvm.CloudID
-				target.InstName = cvm.Name
-				target.PrivateIPAddress = cvm.PrivateIPv4Addresses
-				target.PublicIPAddress = cvm.PublicIPv4Addresses
-				target.Zone = cvm.Zone
-			}
+				target := &hclb.RegisterTarget{
+					TargetType: d.InstType,
+					Port:       int64(d.RsPort[0]),
+					Weight:     converter.ValToPtr(int64(converter.PtrToVal(d.Weight))),
+				}
+				if d.InstType == enumor.EniInstType {
+					target.EniIp = d.RsIp
+				}
+
+				if d.InstType == enumor.CvmInstType && !converter.PtrToVal(tCloudLB.Extension.SnatPro) {
+					cvm, err := validateCvmExist(kt,
+						c.dataServiceCli, d.RsIp, c.vendor, c.bkBizID, c.accountID, lb)
+					if err != nil {
+						logs.Errorf("validate cvm exist failed, ip: %s, err: %v, rid: %s", d.RsIp, err, kt.Rid)
+						firstError.CompareAndSwap(nil, err)
+						return
+					}
+
+					target.CloudInstID = cvm.CloudID
+					target.InstName = cvm.Name
+					target.PrivateIPAddress = cvm.PrivateIPv4Addresses
+					target.PublicIPAddress = cvm.PublicIPv4Addresses
+					target.Zone = cvm.Zone
+				}
+				targetChan <- target
+			}(detail)
+		}
+
+		go func() {
+			wg.Wait()
+			close(targetChan)
+		}()
+		targets := make([]*hclb.RegisterTarget, 0, len(taskDetails))
+		for target := range targetChan {
 			targets = append(targets, target)
+		}
+
+		if errVal := firstError.Load(); errVal != nil {
+			if e, ok := errVal.(error); ok {
+				return nil, e
+			}
+			return nil, fmt.Errorf("unknown error type in firstError: %v", errVal)
 		}
 
 		req := &hclb.BatchRegisterTCloudTargetReq{
@@ -482,11 +541,18 @@ func (c *Layer7ListenerBindRSExecutor) updateTaskDetails(kt *kit.Kit) error {
 	for _, batch := range slice.Split(c.taskDetails, int(core.DefaultMaxPageLimit)) {
 		updateItems := make([]task.UpdateTaskDetailField, 0, len(c.taskDetails))
 		for _, detail := range batch {
+			if detail.flowID == "" || detail.actionID == "" {
+				logs.Errorf("task detail flowID or actionID is empty, taskDetail: %+v, rid: %s", detail, kt.Rid)
+				continue
+			}
 			updateItems = append(updateItems, task.UpdateTaskDetailField{
 				ID:            detail.taskDetailID,
 				FlowID:        detail.flowID,
 				TaskActionIDs: []string{detail.actionID},
 			})
+		}
+		if len(updateItems) == 0 {
+			continue
 		}
 		updateDetailsReq := &task.UpdateDetailReq{
 			Items: updateItems,

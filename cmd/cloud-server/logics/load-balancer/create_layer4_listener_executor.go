@@ -423,11 +423,18 @@ func (c *CreateLayer4ListenerExecutor) updateTaskDetails(kt *kit.Kit) error {
 	for _, batch := range slice.Split(c.taskDetails, int(core.DefaultMaxPageLimit)) {
 		updateItems := make([]task.UpdateTaskDetailField, 0, len(c.taskDetails))
 		for _, detail := range batch {
+			if detail.flowID == "" || detail.actionID == "" {
+				logs.Errorf("task detail flowID or actionID is empty, taskDetail: %+v, rid: %s", detail, kt.Rid)
+				continue
+			}
 			updateItems = append(updateItems, task.UpdateTaskDetailField{
 				ID:            detail.taskDetailID,
 				FlowID:        detail.flowID,
 				TaskActionIDs: []string{detail.actionID},
 			})
+		}
+		if len(updateItems) == 0 {
+			continue
 		}
 		updateDetailsReq := &task.UpdateDetailReq{
 			Items: updateItems,

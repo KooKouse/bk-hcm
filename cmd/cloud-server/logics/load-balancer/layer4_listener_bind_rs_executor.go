@@ -89,10 +89,10 @@ func (c *Layer4ListenerBindRSExecutor) Execute(kt *kit.Kit, source enumor.TaskMa
 		return "", err
 	}
 
-	//err = c.validate(kt)
-	//if err != nil {
-	//	return "", err
-	//}
+	err = c.validate(kt)
+	if err != nil {
+		return "", err
+	}
 	c.filter()
 
 	taskID, err := c.buildTaskManagementAndDetails(kt, source)
@@ -237,9 +237,6 @@ func (c *Layer4ListenerBindRSExecutor) createTaskDetailsGroupByTargetGroup(kt *k
 	details []*layer4ListenerBindRSTaskDetail) (map[string][]*layer4ListenerBindRSTaskDetail, map[string]string,
 	error) {
 
-	tgToDetails := make(map[string][]*layer4ListenerBindRSTaskDetail)
-	tgToListenerCloudID := make(map[string]string)
-
 	concurrentErr := concurrence.BaseExec(cc.CloudServer().CLBImportConfig.ConcurrentCount, details,
 		func(detail *layer4ListenerBindRSTaskDetail) error {
 			listener, err := getListener(kt, c.dataServiceCli, c.accountID, lbCloudID, detail.Protocol,
@@ -259,16 +256,17 @@ func (c *Layer4ListenerBindRSExecutor) createTaskDetailsGroupByTargetGroup(kt *k
 		logs.Errorf("get listener failed, err: %v, rid: %s", concurrentErr, kt.Rid)
 		return nil, nil, concurrentErr
 	}
-	tgToListenerCloudID, LblCloudIDToTGID, err := getTGListenerRelsByRuleCloudIDs(kt, c.dataServiceCli,
+	tgToListenerCloudID, lblCloudIDToTGID, err := getTGListenerRelsByRuleCloudIDs(kt, c.dataServiceCli,
 		lbID, slice.Map(details, func(detail *layer4ListenerBindRSTaskDetail) string {
 			return detail.listenerCloudID
 		}))
 	if err != nil {
+		logs.Errorf("get target group listener relations failed, lbID: %s, err: %v, rid: %s", lbID, err, kt.Rid)
 		return nil, nil, err
 	}
-
+	tgToDetails := make(map[string][]*layer4ListenerBindRSTaskDetail)
 	for _, detail := range details {
-		tgID, ok := LblCloudIDToTGID[detail.listenerCloudID]
+		tgID, ok := lblCloudIDToTGID[detail.listenerCloudID]
 		if !ok {
 			logs.Errorf("tg not found for listener cloudID: %s, lbID: %s, rid: %s", detail.listenerCloudID, lbID, kt.Rid)
 			return nil, nil, fmt.Errorf("tg not found for listener cloudID: %s, lbID: %s", detail.listenerCloudID, lbID)
@@ -515,11 +513,18 @@ func (c *Layer4ListenerBindRSExecutor) updateTaskDetails(kt *kit.Kit) error {
 	for _, batch := range slice.Split(c.taskDetails, int(core.DefaultMaxPageLimit)) {
 		updateItems := make([]task.UpdateTaskDetailField, 0, len(c.taskDetails))
 		for _, detail := range batch {
+			if detail.flowID == "" || detail.actionID == "" {
+				logs.Errorf("task detail flowID or actionID is empty, taskDetail: %+v, rid: %s", detail, kt.Rid)
+				continue
+			}
 			updateItems = append(updateItems, task.UpdateTaskDetailField{
 				ID:            detail.taskDetailID,
 				FlowID:        detail.flowID,
 				TaskActionIDs: []string{detail.actionID},
 			})
+		}
+		if len(updateItems) == 0 {
+			continue
 		}
 		updateDetailsReq := &task.UpdateDetailReq{
 			Items: updateItems,

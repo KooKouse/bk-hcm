@@ -31,6 +31,7 @@ import (
 	hclb "hcm/pkg/api/hc-service/load-balancer"
 	ts "hcm/pkg/api/task-server"
 	"hcm/pkg/async/action"
+	"hcm/pkg/cc"
 	dataservice "hcm/pkg/client/data-service"
 	taskserver "hcm/pkg/client/task-server"
 	"hcm/pkg/criteria/constant"
@@ -38,6 +39,7 @@ import (
 	tableasync "hcm/pkg/dal/table/async"
 	"hcm/pkg/kit"
 	"hcm/pkg/logs"
+	"hcm/pkg/tools/concurrence"
 	"hcm/pkg/tools/converter"
 	"hcm/pkg/tools/counter"
 	"hcm/pkg/tools/slice"
@@ -70,6 +72,7 @@ type createUrlRuleTaskDetail struct {
 	taskDetailID string
 	flowID       string
 	actionID     string
+	listenerID   string
 	*CreateUrlRuleDetail
 }
 
@@ -226,19 +229,29 @@ func (c *CreateUrlRuleExecutor) buildFlow(kt *kit.Kit, lb corelb.LoadBalancerRaw
 func (c *CreateUrlRuleExecutor) mapByListener(kt *kit.Kit, lbCloudID string, details []*createUrlRuleTaskDetail) (
 	map[string][]*createUrlRuleTaskDetail, error) {
 
+	concurrentErr := concurrence.BaseExec(cc.CloudServer().CLBImportConfig.ConcurrentCount, details,
+		func(detail *createUrlRuleTaskDetail) error {
+			listener, err := getListener(kt, c.dataServiceCli, c.accountID, lbCloudID, detail.Protocol,
+				detail.ListenerPort[0], c.bkBizID, c.vendor)
+			if err != nil {
+				logs.Errorf("get listener failed, lb(%s), port(%v),err: %v, rid: %s",
+					lbCloudID, detail.ListenerPort, err, kt.Rid)
+				return err
+			}
+			if listener == nil {
+				return fmt.Errorf("clb(%s) listener(%d) not found", lbCloudID, detail.ListenerPort[0])
+			}
+			detail.listenerID = listener.ID
+			return nil
+		})
+	if concurrentErr != nil {
+		logs.Errorf("get listener failed, lb(%s), err: %v, rid: %s", lbCloudID, concurrentErr, kt.Rid)
+		return nil, concurrentErr
+	}
+
 	listenerToDetails := make(map[string][]*createUrlRuleTaskDetail)
 	for _, detail := range details {
-		listener, err := getListener(kt, c.dataServiceCli, c.accountID, lbCloudID, detail.Protocol,
-			detail.ListenerPort[0], c.bkBizID, c.vendor)
-		if err != nil {
-			logs.Errorf("get listener failed, lb(%s), port(%v),err: %v, rid: %s",
-				lbCloudID, detail.ListenerPort, err, kt.Rid)
-			return nil, err
-		}
-		if listener == nil {
-			return nil, fmt.Errorf("clb(%s) listener(%d) not found", lbCloudID, detail.ListenerPort[0])
-		}
-		listenerToDetails[listener.ID] = append(listenerToDetails[listener.ID], detail)
+		listenerToDetails[detail.listenerID] = append(listenerToDetails[detail.listenerID], detail)
 	}
 	return listenerToDetails, nil
 }
@@ -426,11 +439,18 @@ func (c *CreateUrlRuleExecutor) updateTaskDetails(kt *kit.Kit) error {
 	for _, batch := range slice.Split(c.taskDetails, int(core.DefaultMaxPageLimit)) {
 		updateItems := make([]task.UpdateTaskDetailField, 0, len(c.taskDetails))
 		for _, detail := range batch {
+			if detail.flowID == "" || detail.actionID == "" {
+				logs.Errorf("task detail flowID or actionID is empty, taskDetail: %+v, rid: %s", detail, kt.Rid)
+				continue
+			}
 			updateItems = append(updateItems, task.UpdateTaskDetailField{
 				ID:            detail.taskDetailID,
 				FlowID:        detail.flowID,
 				TaskActionIDs: []string{detail.actionID},
 			})
+		}
+		if len(updateItems) == 0 {
+			continue
 		}
 		updateDetailsReq := &task.UpdateDetailReq{
 			Items: updateItems,

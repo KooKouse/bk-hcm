@@ -204,9 +204,9 @@ func getTargetGroupID(kt *kit.Kit, cli *dataservice.Client, lbID string, ruleClo
 }
 
 func getTGListenerRelsByRuleCloudIDs(kt *kit.Kit, cli *dataservice.Client, lbID string, ruleCloudIDs []string) (
-	tgIDToRuleID map[string]string, ruleCloudIDToTgID map[string]string, err error) {
+	tgIDToCloudRuleID map[string]string, ruleCloudIDToTgID map[string]string, err error) {
 
-	tgIDToRuleID = make(map[string]string, len(ruleCloudIDs))
+	tgIDToCloudRuleID = make(map[string]string, len(ruleCloudIDs))
 	ruleCloudIDToTgID = make(map[string]string, len(ruleCloudIDs))
 	for _, batch := range slice.Split(ruleCloudIDs, int(core.DefaultMaxPageLimit)) {
 		listReq := &core.ListReq{
@@ -225,11 +225,11 @@ func getTGListenerRelsByRuleCloudIDs(kt *kit.Kit, cli *dataservice.Client, lbID 
 
 		for _, item := range rel.Details {
 			ruleCloudIDToTgID[item.CloudListenerRuleID] = item.TargetGroupID
-			tgIDToRuleID[item.TargetGroupID] = item.CloudListenerRuleID
+			tgIDToCloudRuleID[item.TargetGroupID] = item.CloudListenerRuleID
 		}
 	}
 
-	return tgIDToRuleID, ruleCloudIDToTgID, nil
+	return tgIDToCloudRuleID, ruleCloudIDToTgID, nil
 }
 
 func getCvm(kt *kit.Kit, cli *dataservice.Client, ip string,

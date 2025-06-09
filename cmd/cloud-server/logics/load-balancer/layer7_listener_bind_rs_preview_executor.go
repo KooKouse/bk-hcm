@@ -368,6 +368,9 @@ type Layer7ListenerBindRSDetail struct {
 	ValidateResult []string        `json:"validate_result"`
 
 	RegionID string `json:"region_id"`
+
+	// 单行数据对应的监听器CloudID, preview validate阶段注入, submit阶段使用
+	listenerCloudID string
 }
 
 func (c *Layer7ListenerBindRSDetail) validate() {
